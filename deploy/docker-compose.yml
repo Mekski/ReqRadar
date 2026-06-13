@@ -1,0 +1,40 @@
+# Local dev stack. Prod reuses this shape with env overrides + the app services
+# (collector/processor/api/web/caddy) layered on. See DESIGN.md §8.
+name: reqradar
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: reqradar
+      POSTGRES_PASSWORD: reqradar
+      POSTGRES_DB: reqradar
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reqradar"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  nats:
+    image: nats:2-alpine
+    # -js enables JetStream (persistence/replay); -m 8222 exposes monitoring.
+    command: ["-js", "-m", "8222"]
+    ports: ["4222:4222", "8222:8222"]
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports: ["9090:9090"]
+    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+    # Host 3001 to avoid colliding with the Next.js dev server on 3000.
+    ports: ["3001:3000"]
+
+volumes:
+  pgdata:

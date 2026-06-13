@@ -1,0 +1,9 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  # Service /metrics targets are added as each service exposes them
+  # (Milestone A/B). See DESIGN.md §7.
+  - job_name: reqradar
+    static_configs:
+      - targets: []
