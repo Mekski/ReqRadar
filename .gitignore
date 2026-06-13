@@ -1,0 +1,21 @@
+# Go
+/bin/
+*.test
+*.out
+coverage.*
+
+# Env / secrets — never commit real values
+.env
+*.local.env
+!.env.example
+
+# Node / Next.js
+node_modules/
+web/.next/
+web/out/
+web/build/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
