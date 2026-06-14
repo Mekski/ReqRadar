@@ -22,6 +22,7 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 - Entity resolution cascade: exact → alias → domain → Claude (write-back alias) → NULL. Every outcome appended to `resolution_decisions`. One LLM call max per unique string, ever.
 - Entity registry is person-aware (`kind` enum) even though v1 only stores companies — v2 recruiter discovery must be additive.
 - `detect_to_alert_ms` is recorded on every alert; the claim is sub-minute **detection-to-alert**, never "from posting" (sources are polled).
+- `ContentHash` is computed over a **canonicalized** payload — strip volatile markers (e.g. Simplify's 🔥/🎓/🛂/🇺🇸 emoji flags) before hashing, or you get phantom re-alerts. Lesson inherited from the predecessor **job-watch** (github.com/Mekski/job-watch), which ReqRadar supersedes. See DESIGN §1 Lineage.
 
 ## Legal bright lines (non-negotiable)
 
@@ -44,6 +45,7 @@ Verified source mapping is in WATCHLIST.md (probed live 2026-06-13). `simplify-l
 - `log/slog` JSON logging; thread one signal ID through all services via NATS header. Prometheus metrics per service; Grafana dashboard is a demo artifact — keep it presentable.
 - Migrations: `golang-migrate`, forward-only.
 - Non-goals v1 (do not build): multi-user auth flows, browse/search UX, recruiter enrichment, X collector, Levels-style comp, k8s.
+- Application tracker (`applications` table, Telegram "Mark as Applied" callback, dashboard funnel) is a **planned Milestone-C extra**, not v1 core — closes the alert→apply loop as a personal single-user funnel, NOT a generic tracker. Schema seam reserved in DESIGN §4; see §9 item 22.
 
 ## Owner context
 

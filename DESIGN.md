@@ -23,6 +23,16 @@ My resume reads as gamedev + applied AI (shipped Roblox game with 830K+ plays, a
 1. Every component must survive the question "why not something simpler?" — the rejected-alternatives section (§10) is load-bearing, not decorative.
 2. The build must not cannibalize application season. The system's own thesis says apps open starting July; the demoable core ships before that.
 
+### Lineage: job-watch (the predecessor)
+
+ReqRadar supersedes **job-watch** (github.com/Mekski/job-watch) — a Python Telegram bot that polls the SimplifyJobs/vanshb03 README tables from a GitHub Action and DMs new SWE-internship rows, with a "Mark as Applied" button that logs to a Google Sheet. ReqRadar absorbs it and carries forward three concrete lessons:
+
+- **Emoji-normalized dedup.** job-watch strips Simplify's 🔥/🎓/🛂/🇺🇸 markers before hashing a row, because Simplify flips those markers on *existing* postings and a naive hash re-alerts. ReqRadar's `ContentHash` must canonicalize the same way (§3.1) — this is a hard-won requirement, not a nicety.
+- **Own scheduler, not Actions cron.** job-watch needed an external every-minute trigger (cron-job.org) because GitHub's `schedule:` is throttled to ~hourly on fresh public repos, which is incompatible with sub-minute latency. ReqRadar runs its own scheduler on the VM — part of why the collector service exists at all.
+- **The apply-loop.** job-watch's "Mark as Applied" button is the seed of ReqRadar's in-app application tracker (§4 planned table, §9 Milestone C).
+
+The interview arc this gives you: *a working single-file Telegram bot, re-architected into an event-driven multi-service system once it outgrew its shape.* That's a stronger story than either project alone.
+
 ### Goals
 
 - Per watchlisted company: historical application-opening timing patterns (3 years of backfilled data), currently open postings, JD version diffs, posted pay ranges, engineering-blog and HN/Reddit signal summaries.
@@ -126,6 +136,7 @@ Design rules:
 - **Collectors do not parse semantics.** They fetch, stamp, hash, and emit. All interpretation lives in the processor — so a parsing bug is fixed once and replayed over stored raw signals, never re-fetched.
 - **Source loss is non-fatal.** Each plugin runs in its own goroutine with panic recovery; a dead source flips its `sources.enabled` health flag and pages via Telegram, nothing else stops. (Required because Reddit's API terms are unverified — that collector may never ship.)
 - **Per-source rate limiting** via `golang.org/x/time/rate`, configured per plugin. Respect robots.txt and published API limits; never authenticate to scrape; never fabricate accounts (the hiQ lesson — §10).
+- **Canonicalize before hashing.** `ContentHash` is computed over a *normalized* payload — strip volatile markers (e.g. Simplify's 🔥/🎓/🛂/🇺🇸 emoji flags) that flip without the posting actually changing. Skipping this causes phantom re-alerts; it's the load-bearing lesson inherited from job-watch (§1 Lineage).
 - Adding a source = one file implementing `Collector` + one row in `sources` config. That's the demo of "adding a new source is cheap."
 
 **v1 plugin roster (priority order):**
@@ -288,6 +299,21 @@ CREATE TABLE collector_runs (
   finished_at TIMESTAMPTZ, status TEXT NOT NULL,
   signal_count INT NOT NULL DEFAULT 0, error TEXT
 );
+
+-- ===== Application tracker (PLANNED — Milestone C, NOT in migrations yet) =====
+-- The in-app version of job-watch's "Mark as Applied" button: closes the
+-- alert → apply → track loop inside ReqRadar. A personal single-user funnel,
+-- deliberately NOT a generic application-tracker product (that's Simplify's turf).
+CREATE TABLE applications (
+  id             BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id        BIGINT NOT NULL REFERENCES users(id),
+  entity_id      BIGINT NOT NULL REFERENCES entities(id),
+  posting_id     BIGINT,                          -- nullable: may mark applied company-level
+  status         TEXT NOT NULL DEFAULT 'applied', -- applied|assessment|interview|offer|rejected|ghosted
+  applied_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  status_history JSONB NOT NULL DEFAULT '[]',     -- [{status, at}] — powers the funnel stats
+  notes          TEXT
+);
 ```
 
 Retention: `raw_signals` partitions dropped after 30 days (replay window); `events`, `posting_versions`, `resolution_decisions` kept forever — they *are* the product.
@@ -424,6 +450,7 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 19. [ ] Golden-file fixture tests for every collector (some land earlier alongside their collector; this task is closing the gaps)
 20. [ ] `vanshb03` collector; `reddit` collector if task 1 cleared it
 21. [ ] Grafana dashboard polish (latency histogram front and center), README with architecture diagram + measured latency evidence, demo GIF
+22. [ ] **Application tracker** (optional extra, lowest priority): `applications` table + a Telegram "Mark as Applied" callback (an *inbound* webhook on the api service — its first user-initiated write path) + a dashboard view showing company logos (from the stored `entities.domain` via a logo API), applied date, and a funnel stat panel (applied / rejected / advanced counts). Personal funnel only; do not let it grow into a generic Simplify-style tracker.
 
 **Cut line:** anything in Milestone C slips before anything in A–B does. The pipeline, backfill, alerts, and CI/CD are the resume; the rest is garnish.
 
