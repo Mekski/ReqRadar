@@ -14,6 +14,10 @@ migrate:
 migrate-down:
 	go run ./cmd/migrate down
 
+# Load seed/watchlist.yaml into the registry/watchlist/sources (idempotent).
+seed:
+	go run ./cmd/seed
+
 build:
 	go build ./...
 

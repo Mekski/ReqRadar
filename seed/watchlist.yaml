@@ -1,0 +1,127 @@
+# ReqRadar watchlist + source config. Hand-edit to add/remove companies, then
+# re-run `make seed` (idempotent upsert). Source of truth for the entity
+# registry, the watchlist, and collector source config. Slugs verified live
+# 2026-06-13 — see WATCHLIST.md.
+
+user:
+  name: Mark Mairs
+  # telegram_chat_id comes from the TELEGRAM_CHAT_ID env var at seed time
+  # (reuse the bot/chat from job-watch). Re-run seed after setting it.
+
+companies:
+  # --- Top priority: directly pollable via Greenhouse/Ashby ---
+  - canonical_name: Roblox
+    domain: roblox.com
+    priority: top
+    ats: { platform: greenhouse, slug: roblox }
+    aliases: [roblox]
+
+  - canonical_name: Anthropic
+    domain: anthropic.com
+    priority: top
+    ats: { platform: greenhouse, slug: anthropic }
+    aliases: [anthropic]
+
+  - canonical_name: OpenAI
+    domain: openai.com
+    priority: top
+    ats: { platform: ashby, slug: openai }
+    aliases: [openai, open ai]
+
+  - canonical_name: xAI
+    domain: x.ai
+    priority: top
+    ats: { platform: greenhouse, slug: xai }
+    aliases: [xai, x.ai, x ai]
+
+  - canonical_name: Riot Games
+    domain: riotgames.com
+    priority: top
+    ats: { platform: greenhouse, slug: riotgames }
+    aliases: [riot games, riotgames, riot]
+
+  - canonical_name: Epic Games
+    domain: epicgames.com
+    priority: mid
+    ats: { platform: greenhouse, slug: epicgames }
+    aliases: [epic games, epicgames]
+
+  - canonical_name: Notion
+    domain: notion.so
+    priority: mid
+    ats: { platform: ashby, slug: notion }
+    aliases: [notion, notion labs, notion.com]
+
+  # --- Proprietary careers sites: detected via the SimplifyJobs aggregator ---
+  - canonical_name: Google
+    domain: google.com
+    priority: mid
+    aliases: [google, google llc, alphabet, google deepmind, deepmind]
+
+  - canonical_name: Apple
+    domain: apple.com
+    priority: mid
+    aliases: [apple, apple inc]
+
+  - canonical_name: Microsoft
+    domain: microsoft.com
+    priority: mid
+    aliases: [microsoft, msft, microsoft corporation]
+
+  - canonical_name: Meta
+    domain: meta.com
+    priority: mid
+    aliases: [meta, meta platforms, facebook, fb]
+
+  - canonical_name: NVIDIA
+    domain: nvidia.com
+    priority: mid
+    aliases: [nvidia]
+
+  - canonical_name: Electronic Arts
+    domain: ea.com
+    priority: mid
+    aliases: [electronic arts, ea]
+
+  - canonical_name: Amazon
+    domain: amazon.com
+    priority: low
+    aliases: [amazon, amazon.com, aws, amazon web services]
+
+  # Niantic's games division folded into Scopely (2025); careers redirect there.
+  # Kept low-priority pending a decision to drop or repoint. See WATCHLIST.md.
+  - canonical_name: Niantic
+    domain: nianticlabs.com
+    priority: low
+    aliases: [niantic, niantic labs]
+
+# Non-ATS sources. Greenhouse/Ashby source rows are derived from the per-company
+# `ats` blocks above (single source of truth), so they are not repeated here.
+sources:
+  - name: simplify-listings
+    kind: aggregator
+    enabled: true
+    config:
+      owner: SimplifyJobs
+      repo: Summer2026-Internships
+      listings_path: .github/scripts/listings.json
+
+  - name: vanshb03
+    kind: aggregator
+    enabled: true
+    config:
+      owner: vanshb03
+      repo: Summer2027-Internships
+
+  - name: hn
+    kind: discussion
+    enabled: true
+    config: {}
+
+  # Disabled until the OAuth app + privacy policy are in place; inference-only,
+  # segregated deletable storage required (see WATCHLIST.md Reddit constraints).
+  - name: reddit
+    kind: discussion
+    enabled: false
+    config:
+      subreddits: [csMajors, cscareerquestions]

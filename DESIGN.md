@@ -426,7 +426,7 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 1. [x] ~~Hand-research: map each watchlist company to its ATS platform; read Reddit API terms~~ **DONE 2026-06-13 — see [WATCHLIST.md](WATCHLIST.md).** 7/15 on Greenhouse+Ashby (verified slugs), 8 proprietary (aggregator-covered), Lever cut, Reddit viable with inference-only + deletable-storage constraints, Niantic in flux (folding into Scopely).
 2. [ ] Repo scaffold: Go workspace, Docker Compose dev env (postgres, nats, prometheus, grafana)
 3. [x] ~~Postgres schema (§4) + `golang-migrate` migrations~~ **DONE 2026-06-13.** 3 migration pairs, embedded-SQL `cmd/migrate` binary, verified on live PG17 (partition routing, rollback, re-apply all pass). Makefile added.
-4. [ ] Seed entity registry: 15 companies, aliases, domains, ATS config from task 1
+4. [x] ~~Seed entity registry: 15 companies, aliases, domains, ATS config~~ **DONE 2026-06-13.** `seed/watchlist.yaml` + idempotent `cmd/seed` loader (config, not migration — watchlist is mutable data). Verified: 15 entities, 38 aliases, 15 watchlist, 6 sources; ATS source rows derived from per-company `ats`; re-run is idempotent. Shared `entity.Normalize` seam established.
 5. [ ] Collector framework: `Collector`/`Backfiller` interfaces, scheduler, per-source rate limiting, panic recovery, `collector_runs` health tracking
 6. [ ] `simplify-listings` collector (polling mode) publishing to `signals.raw.*`
 7. [ ] `processor`: normalize → entity-resolution cascade → dedupe/diff → persist → emit `events.*`
