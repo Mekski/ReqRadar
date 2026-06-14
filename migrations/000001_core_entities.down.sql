@@ -1,0 +1,7 @@
+DROP TABLE IF EXISTS sources;
+DROP TABLE IF EXISTS watchlist;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS resolution_decisions;
+DROP TABLE IF EXISTS entity_aliases;
+DROP TABLE IF EXISTS entities;
+DROP TYPE IF EXISTS entity_kind;

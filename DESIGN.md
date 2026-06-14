@@ -230,17 +230,17 @@ CREATE TABLE sources (
   name TEXT UNIQUE NOT NULL, kind TEXT NOT NULL,
   config JSONB NOT NULL DEFAULT '{}', enabled BOOLEAN NOT NULL DEFAULT true
 );
-CREATE TABLE raw_signals (                       -- partitioned by month; drop partitions >30d
+CREATE TABLE raw_signals (                       -- partitioned by OBSERVED_AT; drop partitions >30d
   id BIGINT GENERATED ALWAYS AS IDENTITY,
   source_id BIGINT NOT NULL REFERENCES sources(id),
   external_id TEXT NOT NULL,
   kind TEXT NOT NULL,
   event_time  TIMESTAMPTZ NOT NULL,              -- when it happened (backfill: years ago)
-  observed_at TIMESTAMPTZ NOT NULL,              -- when we saw it (latency t0)
+  observed_at TIMESTAMPTZ NOT NULL,              -- when we ingested it (partition key + latency t0)
   content_hash TEXT NOT NULL,
   payload JSONB NOT NULL,
-  PRIMARY KEY (id, event_time)
-) PARTITION BY RANGE (event_time);
+  PRIMARY KEY (id, observed_at)
+) PARTITION BY RANGE (observed_at);              -- retention axis = ingest time, not event time
 
 -- ===== Normalized, forever-retained =====
 CREATE TABLE events (                            -- partitioned by month; kept forever
@@ -293,6 +293,12 @@ CREATE TABLE collector_runs (
 Retention: `raw_signals` partitions dropped after 30 days (replay window); `events`, `posting_versions`, `resolution_decisions` kept forever — they *are* the product.
 
 The `event_time` / `ingest_time` split exists because backfill ingests 2023 postings in 2026; every timing-pattern query groups by `event_time`.
+
+**Two partition-axis decisions (refined during implementation, verified against a live PG17):**
+- `raw_signals` partitions by **`observed_at`** (ingest time), not `event_time` — retention is "drop what we ingested >30 days ago," and backfilled rows carry old `event_time`s but are ingested now, so `observed_at` is the correct axis. `events` partitions by **`event_time`** because every timing query prunes on when-it-happened.
+- `events.posting_id` carries **no foreign key** on purpose: the event log is the immutable source of truth and must not be blocked by, or cascade from, mutations to the `postings` table. Integrity is maintained by the processor.
+
+Partitions are created by an idempotent `reqradar_ensure_month_partition(parent, month)` helper (reused by the Milestone-C maintenance job); a `DEFAULT` partition on each parent is a safety net so an insert never fails if that job lapses.
 
 ---
 
@@ -393,7 +399,7 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 
 1. [x] ~~Hand-research: map each watchlist company to its ATS platform; read Reddit API terms~~ **DONE 2026-06-13 — see [WATCHLIST.md](WATCHLIST.md).** 7/15 on Greenhouse+Ashby (verified slugs), 8 proprietary (aggregator-covered), Lever cut, Reddit viable with inference-only + deletable-storage constraints, Niantic in flux (folding into Scopely).
 2. [ ] Repo scaffold: Go workspace, Docker Compose dev env (postgres, nats, prometheus, grafana)
-3. [ ] Postgres schema (§4) + `golang-migrate` migrations
+3. [x] ~~Postgres schema (§4) + `golang-migrate` migrations~~ **DONE 2026-06-13.** 3 migration pairs, embedded-SQL `cmd/migrate` binary, verified on live PG17 (partition routing, rollback, re-apply all pass). Makefile added.
 4. [ ] Seed entity registry: 15 companies, aliases, domains, ATS config from task 1
 5. [ ] Collector framework: `Collector`/`Backfiller` interfaces, scheduler, per-source rate limiting, panic recovery, `collector_runs` health tracking
 6. [ ] `simplify-listings` collector (polling mode) publishing to `signals.raw.*`
