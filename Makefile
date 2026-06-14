@@ -18,6 +18,10 @@ migrate-down:
 seed:
 	go run ./cmd/seed
 
+# Run the collector service (polls enabled sources -> NATS).
+run-collector:
+	go run ./cmd/collector
+
 build:
 	go build ./...
 

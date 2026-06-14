@@ -4,6 +4,29 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 **Read DESIGN.md before making any architectural change.** It is the locked design; §10 (rejected alternatives) lists decisions that must not be silently re-introduced.
 
+## Build status & run order (updated 2026-06-13)
+
+**Milestone A: tasks 1–6 done** — research, scaffold, schema+migrations, seed, collector framework, simplify-listings collector. **Next: task 7 (processor)** — consume `signals.raw.*`, normalize → entity-resolve → dedupe/diff → write Postgres → emit `events.*`; **then task 8** (simplify backfill via listings.json git history). See DESIGN §9 for the full checklist.
+
+Local run order (needs Docker + Go 1.26; secrets in `.env`, gitignored):
+1. `make dev-up` — postgres, nats (+JetStream), prometheus, grafana
+2. `make migrate` — apply schema (idempotent)
+3. `make seed` — load `seed/watchlist.yaml` (reads `TELEGRAM_CHAT_ID` from `.env`)
+4. `make run-collector` — polls enabled sources, publishes `signals.raw.<source>` to NATS
+
+Verify data flow: NATS monitoring `http://localhost:8222/jsz?streams=1` (SIGNALS message count); `collector_runs` table for per-run health (status/signal_count/error). Telegram bot is **@ReqRadarBot**, connectivity test already delivered.
+
+## Package layout
+
+- `cmd/<svc>` — thin entrypoints: collector, processor, api, migrate, seed
+- `internal/signal` — `RawSignal` envelope (the cross-service contract)
+- `internal/collector` — `Collector`/`Backfiller` interfaces, `Runner`, per-source `Factory` registration
+- `internal/collector/<name>` — one package per collector (e.g. `simplify`)
+- `internal/bus` — NATS JetStream wrapper; provisions SIGNALS (`signals.raw.>`, 35d) + EVENTS (`events.>`, 90d) streams
+- `internal/store` — pgxpool + typed queries (no raw SQL in services)
+- `internal/entity` — shared `Normalize` (the one definition the resolver reuses)
+- `internal/config`, `internal/service` — env config + logging/shutdown bootstrap
+
 ## Locked stack
 
 - **Go** for the three backend services: `collector`, `processor`, `api` (REST + Telegram alert dispatcher in one binary).
@@ -40,7 +63,8 @@ Verified source mapping is in WATCHLIST.md (probed live 2026-06-13). `simplify-l
 
 ## Conventions
 
-- Adding a source = one file implementing the `Collector` interface (+ optional `Backfiller`) + a `sources` row. If it takes more than that, the framework regressed.
+- Adding a source = one collector package implementing `Collector` (+ optional `Backfiller`), one `r.Register("<name>", New)` line in `cmd/collector`, and a `sources` row (seed it via `seed/watchlist.yaml`). The `New` factory receives the source row's JSON config; the DB `enabled` flag decides whether it runs. If it takes more than that, the framework regressed.
+- Collectors emit ALL current items each poll (active only) and let the processor dedupe by `ExternalID`+`ContentHash` — collectors stay dumb and replayable. Conditional GET (ETag/SHA) avoids re-emitting unchanged data; conditional-GET state is in-memory, so a restart re-emits once and the processor absorbs it.
 - Every collector has golden-file fixture tests from real captured payloads. Format drift must fail CI, not silently drop data.
 - `log/slog` JSON logging; thread one signal ID through all services via NATS header. Prometheus metrics per service; Grafana dashboard is a demo artifact — keep it presentable.
 - Migrations: `golang-migrate`, forward-only.
