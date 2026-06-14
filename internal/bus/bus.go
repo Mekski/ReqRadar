@@ -69,4 +69,14 @@ func (b *Bus) Publish(subject string, data []byte) error {
 	return err
 }
 
+// SubscribeSignals registers a durable push consumer over signals.raw.*. Manual
+// ack means a failed handle (Nak) is redelivered; processing is idempotent.
+func (b *Bus) SubscribeSignals(handler nats.MsgHandler) (*nats.Subscription, error) {
+	return b.js.Subscribe(SignalsPrefix+"*", handler,
+		nats.Durable("processor"),
+		nats.ManualAck(),
+		nats.AckExplicit(),
+	)
+}
+
 func (b *Bus) Close() { _ = b.nc.Drain() }

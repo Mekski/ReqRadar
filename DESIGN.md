@@ -169,6 +169,13 @@ Pipeline stages (sequential per message, concurrent across messages):
 
 Idempotency rule: processing is a pure function of (raw signal, current DB state); replaying a JetStream stream is always safe.
 
+**Implementation status (task 7, 2026-06-14) — what's built and what's deferred:**
+- Built: durable consumer, per-source normalizers (`internal/processor`), deterministic resolution (alias → domain) with watchlist filter, transaction-per-signal dedupe emitting `posting_opened` / `jd_changed`, idempotent on redelivery (change detection reads committed state).
+- **Deferred — LLM resolution (cascade step 4):** the deterministic alias/domain match already resolves all watchlist companies (they're seeded with aliases); the LLM is only for the ambiguous long tail, which resolves to "not a watchlist entity" anyway. Add when a real miss appears.
+- **Deferred — `posting_closed` detection:** requires reconciling "seen this poll" vs stored open postings; a batch concern, not streaming. Only `posting_opened`/`jd_changed` emit today.
+- **Deferred — pay-range extraction:** Milestone C (§9 item 17); `postings.pay_*` stay null.
+- **Deviation — `raw_signals` stores watchlist-resolved signals only** (not every ingested signal): keeps the replay buffer lean (104/poll vs 1,404) and aligned with what's persisted. Not lossy in practice — the collector re-emits all active listings each change, so a newly-watchlisted company reappears within one poll.
+
 ### 3.3 `api`
 
 Two responsibilities in one binary (split documented as a considered-and-rejected fourth service — at one consumer and one user it's a config line, not a service):
@@ -429,7 +436,7 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 4. [x] ~~Seed entity registry: 15 companies, aliases, domains, ATS config~~ **DONE 2026-06-13.** `seed/watchlist.yaml` + idempotent `cmd/seed` loader (config, not migration — watchlist is mutable data). Verified: 15 entities, 38 aliases, 15 watchlist, 6 sources; ATS source rows derived from per-company `ats`; re-run is idempotent. Shared `entity.Normalize` seam established.
 5. [x] ~~Collector framework: interfaces, scheduler, panic recovery, `collector_runs` health tracking~~ **DONE 2026-06-13.** `internal/collector` Runner + **factory** registration (DB `sources` rows drive construction), `internal/bus` (NATS JetStream: SIGNALS + EVENTS streams), `internal/store` (pgxpool). Panic recovery per run; one dead source can't stop others. Per-source rate limiting deferred to per-collector (greenhouse, which makes per-org requests) — simplify is one request/poll.
 6. [x] ~~`simplify-listings` collector (polling mode) publishing to `signals.raw.*`~~ **DONE 2026-06-13.** Verified live: emitted 1,404 active-posting signals to NATS, `collector_runs` recorded ok. Conditional GET (ETag) skips unchanged polls; emits all active listings and lets the processor dedupe (collectors stay dumb/replayable). Backfill mode is task 8.
-7. [ ] `processor`: normalize → entity-resolution cascade → dedupe/diff → persist → emit `events.*`
+7. [x] ~~`processor`: normalize → entity-resolution cascade → dedupe/diff → persist → emit `events.*`~~ **DONE 2026-06-14.** Durable JetStream consumer over `signals.raw.*`; per-source normalizers; resolver (alias/domain) + watchlist filter; tx-per-signal dedupe (opened/changed/unchanged); emits `events.*`. Verified live: 5,609 input signals (≈4× dupes) → exactly 104 postings / 104 events across 9 watchlist companies, 552 non-watchlist companies dropped. event_time correctly from date_posted (2025), ingest_time today — partition split proven. Deferrals (see §3.2 note): LLM resolution step, posting_closed detection, pay extraction.
 8. [ ] `simplify-listings` Backfiller over listings.json git history; validate with a SQL query showing per-company posting-open months across 2023–2026 (this query is the timing-patterns feature in embryo)
 
 **Milestone B — demoable core** (ship gate: **a real alert for a real posting fires on my phone, and the deploy that did it went through CI**)

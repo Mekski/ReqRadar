@@ -6,7 +6,11 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 ## Build status & run order (updated 2026-06-13)
 
-**Milestone A: tasks 1–6 done** — research, scaffold, schema+migrations, seed, collector framework, simplify-listings collector. **Next: task 7 (processor)** — consume `signals.raw.*`, normalize → entity-resolve → dedupe/diff → write Postgres → emit `events.*`; **then task 8** (simplify backfill via listings.json git history). See DESIGN §9 for the full checklist.
+**Milestone A: tasks 1–7 done** — research, scaffold, schema+migrations, seed, collector framework, simplify-listings collector, **processor** (`internal/processor`: durable consumer over `signals.raw.*`, normalize → resolve (alias/domain) + watchlist filter → tx-per-signal dedupe → Postgres → emit `events.*`). Verified live: 5,609 dupe signals → 104 postings/events, idempotent. **Next: task 8** (simplify backfill via listings.json git history) — then Milestone B (api + Telegram alert dispatcher consuming `events.*`).
+
+Processor deferrals (see DESIGN §3.2): LLM resolution step (deterministic alias/domain covers seeded watchlist companies), `posting_closed` detection, pay extraction. `raw_signals` stores watchlist-resolved signals only (lean replay buffer).
+
+Background-run gotcha: `go run ./cmd/X` spawns a child `exe` process; `kill` on the `go run` PID may not stop it. Use `make run-X` then `pkill -f exe/X`, or build first, when testing services in the background.
 
 Local run order (needs Docker + Go 1.26; secrets in `.env`, gitignored):
 1. `make dev-up` — postgres, nats (+JetStream), prometheus, grafana

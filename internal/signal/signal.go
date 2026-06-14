@@ -34,3 +34,17 @@ type RawSignal struct {
 	Payload     json.RawMessage `json:"payload"`
 	ContentHash string          `json:"content_hash"`
 }
+
+// Event is the envelope the processor publishes to events.<type> after a signal
+// is normalized, resolved to a watchlist entity, and found to be new or changed.
+// The alert dispatcher consumes it. ObservedAt is carried through from the
+// originating RawSignal so the dispatcher can compute detect_to_alert_ms.
+type Event struct {
+	EventID    int64           `json:"event_id"`
+	EntityID   int64           `json:"entity_id"`
+	PostingID  *int64          `json:"posting_id,omitempty"`
+	Type       string          `json:"type"`
+	EventTime  time.Time       `json:"event_time"`
+	ObservedAt time.Time       `json:"observed_at"`
+	Data       json.RawMessage `json:"data"`
+}
