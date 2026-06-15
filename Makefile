@@ -26,6 +26,10 @@ run-collector:
 run-processor:
 	go run ./cmd/processor
 
+# Run the api service (REST API + Telegram alert dispatcher).
+run-api:
+	go run ./cmd/api
+
 # One-shot historical backfill (needs GITHUB_TOKEN; run the processor alongside).
 backfill:
 	go run ./cmd/backfill

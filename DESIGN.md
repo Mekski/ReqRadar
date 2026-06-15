@@ -185,6 +185,8 @@ Two responsibilities in one binary (split documented as a considered-and-rejecte
 
 **Auth (v1):** the dashboard and API sit behind Caddy with basic auth; the API additionally checks a static bearer token. All user-scoped tables carry `user_id` from day one (one row in `users`). Multi-user later means adding session auth, not a schema migration.
 
+**Backfill-vs-alert guard (decided + verified 2026-06-14):** the dispatcher's `events.*` consumer uses JetStream **`DeliverNew`**, so only events published after it starts are delivered — historical/backfill events already in the stream never alert. The originally-planned "ignore `event_time` older than 24h" filter was rejected: a *newly detected* posting can carry an old `date_posted` (it was posted weeks ago but just appeared in the aggregator), so a time filter would wrongly suppress real alerts. `detect_to_alert_ms` is measured from the signal's `ObservedAt` (collector detection) to send; in a healthy live system this is sub-second (verified 607ms). A large value means signals sat queued (e.g. processor was down) — honest, not a bug.
+
 ### 3.4 LLM usage (Claude API)
 
 Three call sites, all non-blocking for the alert path:
@@ -443,8 +445,8 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 
 **Milestone B — demoable core** (ship gate: **a real alert for a real posting fires on my phone, and the deploy that did it went through CI**)
 
-9. [ ] `api` service: REST endpoints (§3.3)
-10. [ ] Alert dispatcher: `events.*` consumer → watchlist filter → Telegram, recording `detect_to_alert_ms`
+9. [x] ~~`api` service: REST endpoints (§3.3)~~ **DONE 2026-06-14.** `internal/api` server: `/healthz`, `/api/companies` (watchlist + open/event counts), `/api/companies/{id}/timeline`, `/api/companies/{id}/timing` (the flagship monthly histogram), `/api/postings`. Single-user (no auth yet; Caddy fronts it in prod). Verified live.
+10. [x] ~~Alert dispatcher: `events.*` consumer → watchlist filter → Telegram, recording `detect_to_alert_ms`~~ **DONE 2026-06-14.** Consumes `events.*` with **`DeliverNew`** (NOT a time filter — see §3.3 note), sends Telegram via `internal/telegram`, records `detect_to_alert_ms`. **Verified live: a re-detected Anthropic posting alerted in 607ms** (sub-minute claim proven); backfill's 1,119 historical events correctly did NOT alert.
 11. [ ] `greenhouse`, `ashby`, `lever` collectors (one file each + config rows — the framework proof)
 12. [ ] `rss` and `hn` collectors
 13. [ ] Next.js dashboard MVP: watchlist view, per-company timeline, open postings, timing-pattern chart from backfill

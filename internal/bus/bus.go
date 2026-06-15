@@ -79,4 +79,18 @@ func (b *Bus) SubscribeSignals(handler nats.MsgHandler) (*nats.Subscription, err
 	)
 }
 
+// SubscribeEvents registers a durable push consumer over events.*. DeliverNew
+// means only events published after this consumer first starts are delivered —
+// so historical/backfill events already in the stream never trigger alerts,
+// while every genuinely new detection does. (A time-on-event_time filter would
+// wrongly suppress newly-detected postings that carry an old date_posted.)
+func (b *Bus) SubscribeEvents(handler nats.MsgHandler) (*nats.Subscription, error) {
+	return b.js.Subscribe(EventsPrefix+"*", handler,
+		nats.Durable("dispatcher"),
+		nats.ManualAck(),
+		nats.AckExplicit(),
+		nats.DeliverNew(),
+	)
+}
+
 func (b *Bus) Close() { _ = b.nc.Drain() }

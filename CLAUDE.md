@@ -10,7 +10,11 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 Processor deferrals (see DESIGN §3.2): LLM resolution step (deterministic alias/domain covers seeded watchlist companies), `posting_closed` detection, pay extraction. `raw_signals` stores watchlist-resolved signals only (lean replay buffer).
 
-Backfill: `make backfill` (needs `GITHUB_TOKEN`; `gh auth token` works) while the processor runs. Samples ~every 60 days back to Aug 2023; current listings.json holds only the live cycle (~8 mo), so multi-year history comes from past commits. Alert dispatcher (Milestone B) MUST ignore events with `event_time` > 24h old so backfill never alerts.
+Backfill: `make backfill` (needs `GITHUB_TOKEN`; `gh auth token` works) while the processor runs. Samples ~every 60 days back to Aug 2023; current listings.json holds only the live cycle (~8 mo), so multi-year history comes from past commits.
+
+**Milestone B in progress.** DONE: api service (`internal/api`, `cmd/api`) = REST API (`/healthz`, `/api/companies`, `/api/companies/{id}/timeline`, `/api/companies/{id}/timing`, `/api/postings`) + Telegram alert dispatcher. Dispatcher consumes `events.*` with JetStream **`DeliverNew`** so backfill events never alert (NOT a time filter — a newly-detected posting can have an old `date_posted`). Telegram client in `internal/telegram`; bot @ReqRadarBot. **Verified live: re-detected Anthropic posting alerted in 607ms** (sub-minute claim proven), and the 1,119 backfill events correctly did not alert. `make run-api`. REMAINING Milestone B: more collectors (greenhouse/ashby/hn — factories exist, just need the collector packages), Next.js dashboard, CI/CD deploy step, prod VM.
+
+NATS has no mounted volume, so `docker compose up -d --force-recreate nats` purges all streams/durables (clean slate for testing). detect_to_alert_ms is measured from signal ObservedAt → send; huge values = stale queued signals (e.g. from a dirty test backlog), not a bug.
 
 Background-run gotcha: `go run ./cmd/X` spawns a child `exe` process; `kill` on the `go run` PID may not stop it. Use `make run-X` then `pkill -f exe/X`, or build first, when testing services in the background.
 

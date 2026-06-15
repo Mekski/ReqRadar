@@ -8,16 +8,20 @@ import (
 )
 
 type Config struct {
-	NATSURL     string
-	PostgresDSN string
-	LogLevel    slog.Level
+	NATSURL       string
+	PostgresDSN   string
+	LogLevel      slog.Level
+	TelegramToken string
+	APIAddr       string
 }
 
 func Load() Config {
 	return Config{
-		NATSURL:     env("REQRADAR_NATS_URL", "nats://localhost:4222"),
-		PostgresDSN: env("REQRADAR_POSTGRES_DSN", "postgres://reqradar:reqradar@localhost:5432/reqradar?sslmode=disable"),
-		LogLevel:    parseLevel(env("REQRADAR_LOG_LEVEL", "info")),
+		NATSURL:       env("REQRADAR_NATS_URL", "nats://localhost:4222"),
+		PostgresDSN:   env("REQRADAR_POSTGRES_DSN", "postgres://reqradar:reqradar@localhost:5432/reqradar?sslmode=disable"),
+		LogLevel:      parseLevel(env("REQRADAR_LOG_LEVEL", "info")),
+		TelegramToken: env("TELEGRAM_BOT_TOKEN", ""),
+		APIAddr:       env("REQRADAR_API_ADDR", ":8080"),
 	}
 }
 
