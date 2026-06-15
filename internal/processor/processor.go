@@ -209,9 +209,13 @@ func (p *Processor) makeEvent(ctx context.Context, tx store.DBTX, entityID int64
 
 // publishStaged sends a staged outbox event and, on success, marks it published
 // so the relay won't resend it. A failure is non-fatal: the row stays unpublished
-// and RelayOutbox retries. This is at-least-once — a crash between a successful
-// publish and the mark yields at most one duplicate, which the alert path
-// tolerates (and the dispatcher's freshness gate bounds).
+// and RelayOutbox retries. This is at-least-once: if a publish succeeds but the
+// row isn't marked — a process crash, or the relay sweep landing in the small gap
+// between Publish and the mark — the relay re-sends it, so at most one duplicate.
+// The alert path tolerates that (and the dispatcher's 48h freshness gate bounds
+// it). A created_at grace window on the relay query would shrink this to
+// crash-only, but the duplicate is rare and harmless, so it's not worth the
+// complexity at single-user volume.
 func (p *Processor) publishStaged(ctx context.Context, id int64, subject string, payload []byte) {
 	if err := p.bus.Publish(subject, payload); err != nil {
 		p.log.Warn("inline publish failed; relay will retry", "subject", subject, "outbox_id", id, "err", err)
