@@ -143,7 +143,7 @@ Design rules:
 
 | Plugin | Mechanism | Covers |
 |---|---|---|
-| `simplify-listings` | Poll `.github/scripts/listings.json` in SimplifyJobs repo; `Backfiller` walks its git history (24K+ commits since Aug 2023, epoch `date_posted`/`date_updated` per listing — verified) | All big-tech posting detection + 3 years of timing history |
+| `simplify-listings` | Poll `.github/scripts/listings.json` (live `dev` branch); `Backfiller` **samples git-history snapshots** (~60-day cadence back to Aug 2023) — the current file only holds the live cycle (~8 mo), so multi-year history needs past commits. Each listing carries epoch `date_posted`. | All big-tech posting detection + ~3 years of timing history |
 | `greenhouse` | `boards-api.greenhouse.io/v1/boards/{org}/jobs?content=true` per configured org | **Verified: Roblox, Anthropic, xAI, Riot, Epic** (5 of watchlist) |
 | `ashby` | `api.ashbyhq.com/posting-api/job-board/{org}` | **Verified: OpenAI, Notion** (2 of watchlist) |
 | `rss` | Standard RSS/Atom polling | Engineering blogs (hiring intent + culture signal) |
@@ -349,7 +349,7 @@ Partitions are created by an idempotent `reqradar_ensure_month_partition(parent,
 
 End-to-end from *posting* was ~3 minutes (bounded by poll interval — stated honestly everywhere). Detection-to-alert was under one second.
 
-**Backfill variant:** the `simplify-listings` Backfiller walks listings.json git history commit by commit, emitting RawSignals with `EventTime` = the listing's epoch `date_posted` (e.g., Aug 2024) and `ObservedAt` = now. Identical pipeline; alert dispatcher ignores events with `event_time` older than 24h; timing-pattern queries light up with three years of history on day one.
+**Backfill variant (built + verified 2026-06-14):** the `simplify-listings` Backfiller **samples** git-history snapshots of listings.json (~60-day cadence back to Aug 2023, deduped by posting id), emitting RawSignals with `EventTime` = the listing's epoch `date_posted` and `ObservedAt` = now, through the identical pipeline. Key finding: the *current* file only spans the live cycle (~8 months), so multi-year history comes from past commits — the cycle-boundary snapshots (e.g. Aug 2025) carry postings with older `date_posted` absent from today's file. Result: 18 snapshots → 34,273 unique postings → **1,119 watchlist events spanning 2023-07 to 2026-06** across 13/15 companies. The alert dispatcher (Milestone B) must ignore events with `event_time` older than 24h so backfill never alerts. Sampling tradeoff (documented, not silent): a posting that opened and closed entirely between two samples is missed — acceptable, since we need the `date_posted` distribution, not every row.
 
 ---
 
@@ -437,7 +437,9 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 5. [x] ~~Collector framework: interfaces, scheduler, panic recovery, `collector_runs` health tracking~~ **DONE 2026-06-13.** `internal/collector` Runner + **factory** registration (DB `sources` rows drive construction), `internal/bus` (NATS JetStream: SIGNALS + EVENTS streams), `internal/store` (pgxpool). Panic recovery per run; one dead source can't stop others. Per-source rate limiting deferred to per-collector (greenhouse, which makes per-org requests) — simplify is one request/poll.
 6. [x] ~~`simplify-listings` collector (polling mode) publishing to `signals.raw.*`~~ **DONE 2026-06-13.** Verified live: emitted 1,404 active-posting signals to NATS, `collector_runs` recorded ok. Conditional GET (ETag) skips unchanged polls; emits all active listings and lets the processor dedupe (collectors stay dumb/replayable). Backfill mode is task 8.
 7. [x] ~~`processor`: normalize → entity-resolution cascade → dedupe/diff → persist → emit `events.*`~~ **DONE 2026-06-14.** Durable JetStream consumer over `signals.raw.*`; per-source normalizers; resolver (alias/domain) + watchlist filter; tx-per-signal dedupe (opened/changed/unchanged); emits `events.*`. Verified live: 5,609 input signals (≈4× dupes) → exactly 104 postings / 104 events across 9 watchlist companies, 552 non-watchlist companies dropped. event_time correctly from date_posted (2025), ingest_time today — partition split proven. Deferrals (see §3.2 note): LLM resolution step, posting_closed detection, pay extraction.
-8. [ ] `simplify-listings` Backfiller over listings.json git history; validate with a SQL query showing per-company posting-open months across 2023–2026 (this query is the timing-patterns feature in embryo)
+8. [x] ~~`simplify-listings` Backfiller over listings.json git history; validate with a SQL query showing per-company posting-open months across 2023–2026~~ **DONE 2026-06-14.** Samples git-history snapshots (current file is only ~8 mo; multi-year needs past commits). Verified: 18 snapshots → 34,273 unique postings → 1,119 watchlist events spanning **2023-07 to 2026-06**, 13/15 companies. Timing query confirmed (Microsoft posts heavily Oct/Dec, Apple Oct/Dec/May). Needs `GITHUB_TOKEN`.
+
+**✅ MILESTONE A COMPLETE (2026-06-14).** Full pipeline runs end to end: collector (poll + backfill) → NATS → processor (resolve/dedupe/persist) → Postgres, with ~3 years of timing data and idempotent processing, all verified on a live stack and green in CI. **Next: Milestone B** — api service + Telegram alert dispatcher (consume `events.*`, fire alerts, instrument `detect_to_alert_ms`) + Next.js dashboard.
 
 **Milestone B — demoable core** (ship gate: **a real alert for a real posting fires on my phone, and the deploy that did it went through CI**)
 

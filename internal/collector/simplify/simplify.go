@@ -3,6 +3,9 @@
 // not interpret or dedupe — that is the processor's job — so it emits all active
 // listings whenever the file changes and lets the processor dedupe by content
 // hash. A conditional GET (ETag) avoids re-emitting when the file is unchanged.
+//
+// It also implements collector.Backfiller (see backfill.go): walking git history
+// to reconstruct multiple years of posting-timing data.
 package simplify
 
 import (
@@ -14,6 +17,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/Mekski/reqradar/internal/collector"
@@ -27,10 +31,13 @@ type config struct {
 }
 
 type Collector struct {
-	client *http.Client
-	url    string
-	etag   string // in-memory conditional-GET state; a restart re-fetches once
-	log    *slog.Logger
+	client       *http.Client
+	owner        string
+	repo         string
+	listingsPath string
+	token        string // GITHUB_TOKEN, used only for backfill (history API); polling is public
+	etag         string // in-memory conditional-GET state; a restart re-fetches once
+	log          *slog.Logger
 }
 
 // New is the collector.Factory for simplify-listings.
@@ -43,15 +50,23 @@ func New(raw json.RawMessage, log *slog.Logger) (collector.Collector, error) {
 		return nil, fmt.Errorf("owner, repo, and listings_path are required")
 	}
 	return &Collector{
-		client: &http.Client{Timeout: 30 * time.Second},
-		// listings.json lives on the dev branch.
-		url: fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/dev/%s", cfg.Owner, cfg.Repo, cfg.ListingsPath),
-		log: log,
+		client:       &http.Client{Timeout: 60 * time.Second},
+		owner:        cfg.Owner,
+		repo:         cfg.Repo,
+		listingsPath: cfg.ListingsPath,
+		token:        os.Getenv("GITHUB_TOKEN"),
+		log:          log,
 	}, nil
 }
 
 func (c *Collector) Name() string            { return "simplify-listings" }
 func (c *Collector) Schedule() time.Duration { return 5 * time.Minute }
+
+// rawURL builds the raw.githubusercontent URL for the listings file at a ref
+// (branch name for polling, commit SHA for backfill snapshots).
+func (c *Collector) rawURL(ref string) string {
+	return fmt.Sprintf("https://raw.githubusercontent.com/%s/%s/%s/%s", c.owner, c.repo, ref, c.listingsPath)
+}
 
 // listing mirrors one entry in listings.json. Field types verified against the
 // live file 2026-06-13: bools, epoch-second ints, string arrays.
@@ -71,7 +86,7 @@ type listing struct {
 }
 
 func (c *Collector) Collect(ctx context.Context, _ time.Time) ([]signal.RawSignal, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.rawURL("dev"), nil)
 	if err != nil {
 		return nil, err
 	}
@@ -96,9 +111,9 @@ func (c *Collector) Collect(ctx context.Context, _ time.Time) ([]signal.RawSigna
 	if err != nil {
 		return nil, err
 	}
-	var listings []listing
-	if err := json.Unmarshal(body, &listings); err != nil {
-		return nil, fmt.Errorf("parse listings: %w", err)
+	listings, err := parseListings(body)
+	if err != nil {
+		return nil, err
 	}
 	c.etag = resp.Header.Get("ETag")
 
@@ -109,22 +124,32 @@ func (c *Collector) Collect(ctx context.Context, _ time.Time) ([]signal.RawSigna
 		if !l.Active {
 			continue // polling emits only currently-open postings; history is backfill's job
 		}
-		payload, err := json.Marshal(l)
-		if err != nil {
-			c.log.Error("marshal listing", "id", l.ID, "err", err)
-			continue
-		}
-		signals = append(signals, signal.RawSignal{
-			Source:      c.Name(),
-			ExternalID:  l.ID,
-			Kind:        signal.KindPosting,
-			EventTime:   time.Unix(l.DatePosted, 0).UTC(),
-			ObservedAt:  now,
-			Payload:     payload,
-			ContentHash: contentHash(l),
-		})
+		signals = append(signals, toSignal(c.Name(), l, now))
 	}
 	return signals, nil
+}
+
+func parseListings(body []byte) ([]listing, error) {
+	var listings []listing
+	if err := json.Unmarshal(body, &listings); err != nil {
+		return nil, fmt.Errorf("parse listings: %w", err)
+	}
+	return listings, nil
+}
+
+// toSignal builds a RawSignal from a listing. EventTime is the posting's own
+// date_posted (historical during backfill); observedAt is when we ingested it.
+func toSignal(source string, l listing, observedAt time.Time) signal.RawSignal {
+	payload, _ := json.Marshal(l)
+	return signal.RawSignal{
+		Source:      source,
+		ExternalID:  l.ID,
+		Kind:        signal.KindPosting,
+		EventTime:   time.Unix(l.DatePosted, 0).UTC(),
+		ObservedAt:  observedAt,
+		Payload:     payload,
+		ContentHash: contentHash(l),
+	}
 }
 
 // contentHash hashes only the JD-meaningful fields, deliberately excluding

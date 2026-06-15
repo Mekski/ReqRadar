@@ -6,9 +6,11 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 ## Build status & run order (updated 2026-06-13)
 
-**Milestone A: tasks 1–7 done** — research, scaffold, schema+migrations, seed, collector framework, simplify-listings collector, **processor** (`internal/processor`: durable consumer over `signals.raw.*`, normalize → resolve (alias/domain) + watchlist filter → tx-per-signal dedupe → Postgres → emit `events.*`). Verified live: 5,609 dupe signals → 104 postings/events, idempotent. **Next: task 8** (simplify backfill via listings.json git history) — then Milestone B (api + Telegram alert dispatcher consuming `events.*`).
+**✅ MILESTONE A COMPLETE (tasks 1–8).** Full pipeline verified live, CI green: collector (poll + backfill) → NATS → processor (`internal/processor`: durable consumer over `signals.raw.*`, normalize → resolve alias/domain + watchlist filter → tx-per-signal dedupe → Postgres → emit `events.*`). Idempotent (5,609 dupe signals → 104 postings/events). Backfill (`cmd/backfill`) samples git-history snapshots → **1,119 watchlist events spanning 2023-07 to 2026-06**, 13/15 companies. **Next: Milestone B** — api service + Telegram alert dispatcher (consume `events.*`, fire alerts, instrument `detect_to_alert_ms`) + Next.js dashboard.
 
 Processor deferrals (see DESIGN §3.2): LLM resolution step (deterministic alias/domain covers seeded watchlist companies), `posting_closed` detection, pay extraction. `raw_signals` stores watchlist-resolved signals only (lean replay buffer).
+
+Backfill: `make backfill` (needs `GITHUB_TOKEN`; `gh auth token` works) while the processor runs. Samples ~every 60 days back to Aug 2023; current listings.json holds only the live cycle (~8 mo), so multi-year history comes from past commits. Alert dispatcher (Milestone B) MUST ignore events with `event_time` > 24h old so backfill never alerts.
 
 Background-run gotcha: `go run ./cmd/X` spawns a child `exe` process; `kill` on the `go run` PID may not stop it. Use `make run-X` then `pkill -f exe/X`, or build first, when testing services in the background.
 

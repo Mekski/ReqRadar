@@ -22,6 +22,14 @@ seed:
 run-collector:
 	go run ./cmd/collector
 
+# Run the processor service (consumes signals.raw.* -> Postgres + events.*).
+run-processor:
+	go run ./cmd/processor
+
+# One-shot historical backfill (needs GITHUB_TOKEN; run the processor alongside).
+backfill:
+	go run ./cmd/backfill
+
 build:
 	go build ./...
 
