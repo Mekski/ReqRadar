@@ -4,6 +4,12 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Fix — resolution_decisions is now a cache, not a per-restart append (over-engineering audit §4.1)
+`recordDecision` deduped only via an in-memory set (reset each process), so every processor restart re-appended a decision row for every company string in the feed — into a "kept forever" table. Validated on the dev DB: **36,847 rows for only 4,258 distinct strings (~8.6× bloat)**. Once an LLM resolution step lands this would also re-trigger calls, violating "one call per unique string, ever."
+- Migration `000009`: collapse existing duplicates (keep earliest per string) → `36,847 → 4,258` rows, then replace the non-unique index with a UNIQUE index on `raw_text`.
+- `RecordResolution` now `INSERT ... ON CONFLICT (raw_text) DO NOTHING` (first decision wins, idempotent across restarts). The in-memory set stays as a hot-path optimization only; the DB index is the real guarantee.
+- DESIGN §4/§6 wording updated ("versioned audit log" → "resolution cache"); `TestRecordResolutionDedup` asserts repeated recording keeps one row. This was the second item from the over-engineering audit (after the dispatcher last-hop fix); the rest of that audit (partitioning, dead code, duplication, Prometheus) is tracked in [issues/audit-findings.md](issues/audit-findings.md).
+
 ### Watchlist — +10 companies (now 30)
 Added Discord/Stripe/Figma/Perplexity/Ramp (A), Coinbase/Airbnb/Pinterest/Snap (B), Spotify (A) per Mark's ranking. The 8 with live Greenhouse/Ashby boards carry ATS slugs → rich pipeline + extracted pay; Snap/Spotify are aggregator-detected (no ATS board). Verified live: new ATS orgs ingest correctly (Coinbase's "FP&A Analyst" matched via its "Internships & Emerging Talent" department — a real intern a title-only filter would miss), pay now shows on Notion ($57/hr) and Ramp ($11.7k/mo) cards, and **0 alerts fired** (48h freshness gate held — no flood from the bulk add). Expected-open for the new names is left to backfill (data-derived) or a later curated pass; the two rolling startups (Perplexity, Ramp) are seeded "rolling".
 

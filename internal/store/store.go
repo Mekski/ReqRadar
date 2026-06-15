@@ -225,9 +225,12 @@ func (s *Store) RecordResolution(ctx context.Context, q DBTX, rawText string, en
 	if model != "" {
 		m = &model
 	}
+	// resolution_decisions is a cache: one decision per raw string. ON CONFLICT
+	// keeps the first decision and makes the write idempotent across restarts.
 	_, err := q.Exec(ctx,
 		`INSERT INTO resolution_decisions (raw_text, entity_id, method, confidence, model)
-		 VALUES ($1, $2, $3, $4, $5)`,
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT (raw_text) DO NOTHING`,
 		rawText, entityID, method, confidence, m)
 	return err
 }

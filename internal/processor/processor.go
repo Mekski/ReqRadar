@@ -260,8 +260,12 @@ func (p *Processor) RelayOutbox(ctx context.Context, limit int) (int, error) {
 	return n, nil
 }
 
-// recordDecision logs each unique raw company string to the resolution audit
-// once per process run, keeping the table at ~unique-company size, not per-signal.
+// recordDecision records the resolution decision for a raw company string. The
+// in-process p.recorded set is only a hot-path optimization — it skips a redundant
+// DB write for strings already handled this run (the feed re-emits everything each
+// poll). The real, cross-restart guarantee of one decision per string is the
+// unique index on resolution_decisions.raw_text (RecordResolution does ON CONFLICT
+// DO NOTHING), so a restart no longer re-appends rows for the whole feed.
 func (p *Processor) recordDecision(ctx context.Context, company string, entityID int64, method string, resolved bool) {
 	p.mu.Lock()
 	if p.recorded[company] {

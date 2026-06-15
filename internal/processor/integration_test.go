@@ -353,3 +353,30 @@ func TestProcessorOutboxRelay(t *testing.T) {
 		t.Errorf("second relay sweep republished %d, want 0 (no duplicate)", n)
 	}
 }
+
+// TestRecordResolutionDedup verifies resolution_decisions is a cache: recording
+// the same raw string twice (as a processor restart would) keeps exactly one row,
+// thanks to the unique index + ON CONFLICT DO NOTHING. Without it, every restart
+// re-appended rows for the whole feed into a kept-forever table.
+func TestRecordResolutionDedup(t *testing.T) {
+	h := setup(t)
+	ctx := context.Background()
+
+	for i := 0; i < 3; i++ {
+		if err := h.st.RecordResolution(ctx, h.st.Pool, "Some Startup", nil, "none", 0.0, ""); err != nil {
+			t.Fatalf("record %d: %v", i, err)
+		}
+	}
+	if got := countRows(t, h.st, `SELECT count(*) FROM resolution_decisions WHERE raw_text = 'Some Startup'`); got != 1 {
+		t.Errorf("resolution_decisions rows for repeated string = %d, want 1 (cache)", got)
+	}
+
+	// A different string still gets its own row.
+	eid := h.entityID
+	if err := h.st.RecordResolution(ctx, h.st.Pool, "Testco", &eid, "alias", 1.0, ""); err != nil {
+		t.Fatalf("record distinct: %v", err)
+	}
+	if got := countRows(t, h.st, `SELECT count(*) FROM resolution_decisions`); got != 2 {
+		t.Errorf("total resolution_decisions = %d, want 2 (one per distinct string)", got)
+	}
+}

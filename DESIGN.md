@@ -227,7 +227,7 @@ CREATE TABLE entity_aliases (
   PRIMARY KEY (entity_id, alias)
 );
 CREATE UNIQUE INDEX ON entity_aliases (alias);  -- an alias maps to exactly one entity
-CREATE TABLE resolution_decisions (              -- versioned audit log; never deleted
+CREATE TABLE resolution_decisions (              -- resolution cache; one row per raw_text (UNIQUE, ON CONFLICT DO NOTHING)
   id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   raw_text    TEXT NOT NULL,
   entity_id   BIGINT REFERENCES entities(id),   -- NULL = resolved to "not a watchlist entity"
@@ -348,7 +348,7 @@ Partitions are created by an idempotent `reqradar_ensure_month_partition(parent,
 
 1. **09:03:12** — `greenhouse` collector's 5-minute poll fires for org `anthropic`. The jobs payload contains an `id` not in its last-seen set. It emits `RawSignal{Source:"greenhouse", ExternalID:"4012345", Kind:posting, EventTime:09:03:12, ObservedAt:09:03:12, ContentHash:"ab12..."}` to subject `signals.raw.greenhouse`. **t0 = ObservedAt.**
 2. **09:03:12.1** — processor's JetStream consumer receives it. Normalize extracts title, location "San Francisco", pay range $— from the JD body, apply URL.
-3. **09:03:12.1** — entity resolution: raw string "Anthropic" → alias table exact hit → `entity_id=3`, method `alias`, no LLM call. A `resolution_decisions` row is appended.
+3. **09:03:12.1** — entity resolution: raw string "Anthropic" → alias table exact hit → `entity_id=3`, method `alias`, no LLM call. A `resolution_decisions` row is recorded (cached on first sighting).
 4. **09:03:12.2** — dedupe: `(source, external_id)` unknown → INSERT into `postings` + first `posting_versions` row → emit `events.posting_opened` with `entity_id=3`.
 5. **09:03:12.3** — persisted; event row written with `event_time=09:03:12`, `ingest_time=09:03:12`.
 6. **09:03:12.4** — api service's alert consumer receives `events.posting_opened`, finds `entity_id=3` on the watchlist with `posting_opened` alerts enabled, formats and sends the Telegram message: *"🔔 Anthropic posted: SWE Intern, Summer 2027 (SF) — [apply]"*.
@@ -382,7 +382,7 @@ normalize(raw) → lower, strip punctuation, strip suffixes (Inc, LLC, Games)
 5. else                                   → entity_id NULL ("not a watchlist entity"), cached too
 ```
 
-Every outcome — including "this is nothing" — is appended to `resolution_decisions`, so each unique string costs at most one LLM call ever, and the audit trail is replayable evidence for the interview story.
+Every outcome — including "this is nothing" — is cached in `resolution_decisions` (one row per raw string, `ON CONFLICT (raw_text) DO NOTHING`), so each unique string costs at most one LLM call ever, even across restarts, and the table is replayable evidence for the interview story. (Re-resolving a string with a better model later would be a deliberate explicit op, not an automatic append.)
 
 **Worked examples:**
 

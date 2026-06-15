@@ -44,3 +44,25 @@ Index keys on lists fetched with `cache: "no-store"` cause React mis-reconciliat
 Some handlers discard fetch errors and every failure renders "no connection to API," conflating 500s / parse errors with network failure. Surface real failures.
 
 > Note: the audit also confirmed several things **clean**: no SQL injection, secrets gitignored, no XSS surface, sensible RSC/client split, current dependencies. Those need no tracking.
+
+## Over-engineering audit (2026-06-15)
+
+A second, separate audit focused on over-engineering. Verified accurate (~90%); one factual miss (it claimed `updateTier` was dead — it's called by `CompanyCard`). Items and status:
+
+### OE-§1b — dispatcher dropped alerts at the last hop
+**Status:** fixed (2026-06-15). The transactional outbox preserved events to NATS, but the dispatcher swallowed Telegram send failures and Ack'd anyway. `handleWatchlist`/`handleFirehose` now return the send error → Nak → redeliver under H3's caps. See [alert-loss-trio.md](alert-loss-trio.md) and the OBS-1 note above.
+
+### OE-§4.1 — resolution_decisions re-appended per restart
+**Status:** fixed (2026-06-15). Now a cache (UNIQUE `raw_text` + `ON CONFLICT DO NOTHING`); migration `000009` collapsed 36,847→4,258 dev rows. See changelog.
+
+### OE-§1a — events/raw_signals month-partitioning is premature
+**Status:** open · design call (yours). At ~1k–35k rows, partitioning is overhead (and forces composite PKs that block the `alerts`/`events` FKs). The stronger interview signal is the reverse: a plain indexed table + a documented "convert at N rows" migration. Reverting is a real (forward-only) schema change, so it's a deliberate decision, not a bug. Recommendation: revert to a plain table, keep the conversion migration documented — but it's defensible to keep if framed as a known premature bet.
+
+### OE-§2 — dead surface
+**Status:** open · deferred (collision). `CompanyTiming` + `/api/companies/{id}/timing` and `OpenPostings` + `/api/postings` have no frontend caller today (superseded by Seasonality); `postings_status_idx` indexes a constant; `pay_*` columns were speculative (now used by the Greenhouse/Ashby pay work). Lives in `api.go`/`server.go`/`web` — the other agent's active files; sweep once they're clear, and confirm the planned Calendar page won't reuse the timing endpoint before deleting it.
+
+### OE-§3 — duplicated definitions
+**Status:** open · deferred (collision). `firehoseCategories` is copied verbatim in `firehose.go` and `cmd/firehose-prime`; the SWE category list appears in ~3 shapes; `MarkFirehoseSeen`/`MarkFirehoseSeenTx` can collapse (DBTX subsumes the pool variant). Mechanical; do in one sweep when the backend files are free.
+
+### OE-§5 — Prometheus/Grafana run but nothing is instrumented
+**Status:** open. Compose runs both; zero `promhttp`/metrics in Go. Either instrument (`detect_to_alert_ms`, outbox backlog are the obvious gauges) or drop the containers until then. Pairs with the metrics follow-up already noted for the outbox relay.
