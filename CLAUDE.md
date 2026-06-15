@@ -10,11 +10,18 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 **Dashboard visual identity (2026-06-15):** re-skinned to **minimalist dark-blue, aligned to Mark's portfolio** (markmairs.vercel.app, source at `/Users/markmairs/CS/portfolio`) — navy `#0d1421` bg, single bright-blue accent `#4f8cff`, blue-tinted thin borders, **JetBrains Mono** as display/label font + **Geist** body, subtle fade/rise + glow-on-hover, generous whitespace. Home groups companies by **S/A/B/C tier** (replaced top/mid/low; seed values updated, re-seed needed). Logos via **Google favicon** (`google.com/s2/favicons` — Clearbit's API is dead). Card stats are now **"roles" + "last active"** (dropped confusing "tracked"/"signals"). **Mark's taste = minimalist, NOT flashy — do not add loud colors or ambitious themes.** An earlier amber "mission-control" version was scrapped for being too generic/loud. UX iteration is ongoing — he's reviewing the home page; other pages may still get feedback. Don't treat the dashboard as final.
 
-**Pick up here** (all OPTIONAL — no deadline; deployment is deliberately deferred):
-1. **Dashboard UX changes** — the active thread. Mark will specify what to change.
-2. **More collectors:** greenhouse/ashby/hn. Factories are already wired; just add `internal/collector/<name>` packages + one `r.Register` line in `cmd/collector`. Verified slugs in WATCHLIST.md. (Greenhouse/Ashby pull a company's WHOLE board incl. full-time — filter to internships.)
-3. **`posting_closed` detection** — makes "open" counts truthful (currently inflated; see gotchas).
-4. **Free deployment + CI deploy step** — Oracle Cloud Always Free / Fly.io. Mark won't pay (see memory `prefers-free-tooling`). Only unbacked resume claim is "deployed to prod."
+**Pick up here — ACTIVE THREAD is dashboard UX (Mark's feedback 2026-06-15):**
+
+1. **Reframe the company detail page around the flagship question "when will SWE intern apps drop this season?"** Today its "posting activity" chart is raw monthly history — not useful, and usually empty (companies aren't backfilled). Instead: aggregate historical `posting_opened` by **month-of-year** (across years) and show an **expected-open window** ("historically opens Aug–Oct, peak Sept"). Handle empty state. Also: **open/closed is ambiguous** (needs `posting_closed`, #4) and **"recent updates" all say "new"** (badge labels event type, not recency — show real dates + what changed, de-jargon).
+2. **NEW PAGE: Calendar** (Mark's idea — the flagship feature done right). Nav becomes **watchlist · calendar · firehose**. A month calendar with watchlist **company logos placed on the months they historically open SWE intern apps** (expect heavy Aug–Sept clustering) — see ALL companies' timing at once instead of clicking each. Derive from per-company `posting_opened` month-of-year aggregation; add a `/api/calendar` endpoint. Day-level detail TBD.
+3. **Run a full `make backfill`** — the "when" features are meaningless without historical timing; newly-added companies (LinkedIn/Tesla/TikTok/GitHub/etc.) have only current data.
+4. **`posting_closed` detection** — so "open roles" means currently open (everything's "open" now; see gotchas). Underpins the detail-page open/closed clarity.
+5. **More collectors:** greenhouse/ashby/hn — factories wired; add `internal/collector/<name>` + one `r.Register` line. Slugs in WATCHLIST.md. (Greenhouse/Ashby pull WHOLE boards incl. full-time — filter to internships.)
+6. **Free deployment + CI deploy step** — Oracle Always Free / Fly.io (Mark won't pay; see memory `prefers-free-tooling`).
+
+**Later milestones (Mark deferred, do NOT build yet):** interview tips, JD-optimization tips, LinkedIn recruiter discovery (registry is person-aware for it, DESIGN §6).
+
+**Alert recency gate (shipped 2026-06-15):** dispatcher only Telegram-alerts when a role's `date_posted` is < 48h old (`alertFreshness` in `internal/api/dispatcher.go`) — events still STORED, but adding a company / backfilling imports old roles silently (no flood). This is the job-watch "only new rows" behavior Mark wanted.
 
 ## Build status & run order (updated 2026-06-13)
 
