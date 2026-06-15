@@ -24,11 +24,33 @@ func NewDispatcher(st *store.Store, tg *telegram.Client, log *slog.Logger) *Disp
 	return &Dispatcher{store: st, tg: tg, log: log}
 }
 
-// Handle sends a Telegram alert to every watcher of the event's entity and
-// records each send with its detect-to-alert latency. The event reaching here is
-// already guaranteed new (the dispatcher's consumer uses DeliverNew), so there is
-// no historical filtering to do.
+// Handle dispatches one event. Firehose events (broad, non-watchlist) go to all
+// users; watchlist events go to that entity's watchers with latency recorded.
+// Events reaching here are already new (the consumer uses DeliverNew).
 func (d *Dispatcher) Handle(ctx context.Context, e signal.Event) error {
+	if e.Type == "firehose" {
+		return d.handleFirehose(ctx, e)
+	}
+	return d.handleWatchlist(ctx, e)
+}
+
+// handleFirehose sends a lightweight "new internship" alert to every user.
+func (d *Dispatcher) handleFirehose(ctx context.Context, e signal.Event) error {
+	chatIDs, err := d.store.AllUserChatIDs(ctx)
+	if err != nil {
+		return fmt.Errorf("chat ids: %w", err)
+	}
+	text := formatFirehose(e)
+	for _, chatID := range chatIDs {
+		if err := d.tg.SendMessage(ctx, chatID, text); err != nil {
+			d.log.Error("firehose send", "err", err)
+		}
+	}
+	d.log.Info("firehose alert sent", "recipients", len(chatIDs))
+	return nil
+}
+
+func (d *Dispatcher) handleWatchlist(ctx context.Context, e signal.Event) error {
 	watchers, err := d.store.UsersWatchingEntity(ctx, e.EntityID)
 	if err != nil {
 		return fmt.Errorf("watchers: %w", err)
@@ -94,6 +116,28 @@ func formatAlert(e signal.Event) string {
 	fmt.Fprintf(&b, "%s %s %s: %s", emoji, d.Company, verb, d.Title)
 	if loc := strings.Join(d.Locations, ", "); loc != "" {
 		fmt.Fprintf(&b, "\n📍 %s", loc)
+	}
+	if d.URL != "" {
+		fmt.Fprintf(&b, "\n🔗 %s", d.URL)
+	}
+	return b.String()
+}
+
+// formatFirehose renders a broad (non-watchlist) alert. The 🆕 marker
+// distinguishes it from a 🔔 watchlist alert at a glance.
+func formatFirehose(e signal.Event) string {
+	var d struct {
+		Company  string `json:"company"`
+		Title    string `json:"title"`
+		URL      string `json:"url"`
+		Category string `json:"category"`
+	}
+	_ = json.Unmarshal(e.Data, &d)
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "🆕 %s — %s", d.Company, d.Title)
+	if d.Category != "" {
+		fmt.Fprintf(&b, "\n📂 %s", d.Category)
 	}
 	if d.URL != "" {
 		fmt.Fprintf(&b, "\n🔗 %s", d.URL)

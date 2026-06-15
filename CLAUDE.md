@@ -12,7 +12,9 @@ Processor deferrals (see DESIGN §3.2): LLM resolution step (deterministic alias
 
 Backfill: `make backfill` (needs `GITHUB_TOKEN`; `gh auth token` works) while the processor runs. Samples ~every 60 days back to Aug 2023; current listings.json holds only the live cycle (~8 mo), so multi-year history comes from past commits.
 
-**Milestone B in progress.** DONE: api service (`internal/api`, `cmd/api`) = REST API (`/healthz`, `/api/companies`, `/api/companies/{id}/timeline`, `/api/companies/{id}/timing`, `/api/postings`) + Telegram alert dispatcher. Dispatcher consumes `events.*` with JetStream **`DeliverNew`** so backfill events never alert (NOT a time filter — a newly-detected posting can have an old `date_posted`). Telegram client in `internal/telegram`; bot @ReqRadarBot. **Verified live: re-detected Anthropic posting alerted in 607ms** (sub-minute claim proven), and the 1,119 backfill events correctly did not alert. `make run-api`. REMAINING Milestone B: more collectors (greenhouse/ashby/hn — factories exist, just need the collector packages), Next.js dashboard, CI/CD deploy step, prod VM.
+**Milestone B in progress.** DONE: api service (`internal/api`, `cmd/api`) = REST API (`/healthz`, `/api/companies`, `/api/companies/{id}/timeline`, `/api/companies/{id}/timing`, `/api/postings`) + Telegram alert dispatcher. Dispatcher consumes `events.*` with JetStream **`DeliverNew`** so backfill events never alert (NOT a time filter — a newly-detected posting can have an old `date_posted`). Telegram client in `internal/telegram`; bot @ReqRadarBot. **Verified live: re-detected Anthropic posting alerted in 607ms** (sub-minute claim proven), and the 1,119 backfill events correctly did not alert. `make run-api`. **Two-tier alerting (added 2026-06-14):** Tier 1 = watchlist 15 (rich pipeline + alerts, all categories). Tier 2 = **firehose** = non-watchlist SWE+AI/ML internships get lightweight 🆕 alerts (job-watch parity, since ReqRadar supersedes it). Processor routes unresolved postings through `maybeFirehose` → `firehose_seen` dedup → `events.firehose` → dispatcher sends to all users. `cmd/firehose-prime` arms it without flooding (skips watchlist companies). Firehose categories (`internal/processor/firehose.go`, mirrored in cmd/firehose-prime): Software, Software Engineering, AI/ML/Data, "Data Science, AI & Machine Learning".
+
+REMAINING Milestone B: more collectors (greenhouse/ashby/hn — factories exist, just need the collector packages), Next.js dashboard, CI/CD deploy step, prod VM.
 
 NATS has no mounted volume, so `docker compose up -d --force-recreate nats` purges all streams/durables (clean slate for testing). detect_to_alert_ms is measured from signal ObservedAt → send; huge values = stale queued signals (e.g. from a dirty test backlog), not a bug.
 
@@ -23,6 +25,9 @@ Local run order (needs Docker + Go 1.26; secrets in `.env`, gitignored):
 2. `make migrate` — apply schema (idempotent)
 3. `make seed` — load `seed/watchlist.yaml` (reads `TELEGRAM_CHAT_ID` from `.env`)
 4. `make run-collector` — polls enabled sources, publishes `signals.raw.<source>` to NATS
+5. `make run-processor` — consumes signals → Postgres + `events.*`
+6. `make run-api` — REST API + alert dispatcher
+7. `make firehose-prime` — run ONCE before arming the firehose (records current backlog silently so ~1,000 active postings don't all alert)
 
 Verify data flow: NATS monitoring `http://localhost:8222/jsz?streams=1` (SIGNALS message count); `collector_runs` table for per-run health (status/signal_count/error). Telegram bot is **@ReqRadarBot**, connectivity test already delivered.
 

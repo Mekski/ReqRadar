@@ -176,6 +176,11 @@ Idempotency rule: processing is a pure function of (raw signal, current DB state
 - **Deferred — pay-range extraction:** Milestone C (§9 item 17); `postings.pay_*` stay null.
 - **Deviation — `raw_signals` stores watchlist-resolved signals only** (not every ingested signal): keeps the replay buffer lean (104/poll vs 1,404) and aligned with what's persisted. Not lossy in practice — the collector re-emits all active listings each change, so a newly-watchlisted company reappears within one poll.
 
+**Two-tier alerting (added 2026-06-14):** the watchlist-first design covers *intelligence* (timing, JD diffs, dashboard) but a job-seeker still wants broad "new internship" alerts for companies outside the 15 — this is what the predecessor job-watch did, so ReqRadar must match it or it regresses.
+- **Tier 1 — watchlist (the 15):** full pipeline (entity, postings, versions, events, timing) + alerts on all internship categories.
+- **Tier 2 — firehose (everyone else):** when a posting does NOT resolve to a watchlist entity AND its category is in the SWE+AI/ML set, the processor records it in a lightweight `firehose_seen` table and, if new, emits `events.firehose`; the dispatcher sends a 🆕 alert to all users. No entity/timing — alert-only. Verified: primed 944 active postings silently, then exactly one simulated-new TikTok posting alerted.
+- **Priming:** `cmd/firehose-prime` records the current active backlog into `firehose_seen` without alerting (run once before arming), so the ~1,000 already-open postings don't all alert — job-watch's state-seed equivalent. It skips watchlist companies so the table stays non-watchlist-only.
+
 ### 3.3 `api`
 
 Two responsibilities in one binary (split documented as a considered-and-rejected fourth service — at one consumer and one user it's a config line, not a service):
@@ -447,6 +452,7 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 
 9. [x] ~~`api` service: REST endpoints (§3.3)~~ **DONE 2026-06-14.** `internal/api` server: `/healthz`, `/api/companies` (watchlist + open/event counts), `/api/companies/{id}/timeline`, `/api/companies/{id}/timing` (the flagship monthly histogram), `/api/postings`. Single-user (no auth yet; Caddy fronts it in prod). Verified live.
 10. [x] ~~Alert dispatcher: `events.*` consumer → watchlist filter → Telegram, recording `detect_to_alert_ms`~~ **DONE 2026-06-14.** Consumes `events.*` with **`DeliverNew`** (NOT a time filter — see §3.3 note), sends Telegram via `internal/telegram`, records `detect_to_alert_ms`. **Verified live: a re-detected Anthropic posting alerted in 607ms** (sub-minute claim proven); backfill's 1,119 historical events correctly did NOT alert.
+10b. [x] **Two-tier firehose alerts (added 2026-06-14, job-watch parity).** Non-watchlist SWE+AI/ML postings → `firehose_seen` dedup → `events.firehose` → 🆕 Telegram alert to all users. `cmd/firehose-prime` arms it without flooding (skips watchlist companies). Verified: 944 primed silently, 1 simulated-new posting alerted. See §3.2.
 11. [ ] `greenhouse`, `ashby`, `lever` collectors (one file each + config rows — the framework proof)
 12. [ ] `rss` and `hn` collectors
 13. [ ] Next.js dashboard MVP: watchlist view, per-company timeline, open postings, timing-pattern chart from backfill

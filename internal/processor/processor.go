@@ -75,7 +75,8 @@ func (p *Processor) Handle(ctx context.Context, raw signal.RawSignal) error {
 	entityID, method, resolved := p.resolver.Resolve(post.Company, post.URL)
 	p.recordDecision(ctx, post.Company, entityID, method, resolved)
 	if !resolved {
-		return nil // not a watchlist entity — dropped (decision recorded)
+		// Not a watchlist company — route to the firehose (broad alerts).
+		return p.maybeFirehose(ctx, raw, post)
 	}
 
 	return p.persist(ctx, raw, sourceID, entityID, post)

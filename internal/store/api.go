@@ -42,6 +42,39 @@ func (s *Store) InsertAlert(ctx context.Context, userID, eventID int64, detectTo
 	return err
 }
 
+// AllUserChatIDs returns every user's Telegram chat id (firehose alerts are not
+// watchlist-scoped, so they go to all users).
+func (s *Store) AllUserChatIDs(ctx context.Context) ([]string, error) {
+	rows, err := s.Pool.Query(ctx, `SELECT telegram_chat_id FROM users`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out = append(out, id)
+	}
+	return out, rows.Err()
+}
+
+// MarkFirehoseSeen records a firehose posting and returns true if it was new
+// (not previously seen). The insert-or-ignore makes "is this new?" a single
+// atomic op.
+func (s *Store) MarkFirehoseSeen(ctx context.Context, source, externalID, company, title, url, category string) (bool, error) {
+	tag, err := s.Pool.Exec(ctx,
+		`INSERT INTO firehose_seen (source, external_id, company, title, url, category)
+		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (source, external_id) DO NOTHING`,
+		source, externalID, company, title, url, category)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() == 1, nil
+}
+
 // FirstUserID returns the single v1 user's id.
 func (s *Store) FirstUserID(ctx context.Context) (int64, error) {
 	var id int64

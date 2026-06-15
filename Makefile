@@ -34,6 +34,10 @@ run-api:
 backfill:
 	go run ./cmd/backfill
 
+# Arm the firehose: record the current active backlog silently (run once).
+firehose-prime:
+	go run ./cmd/firehose-prime
+
 build:
 	go build ./...
 
