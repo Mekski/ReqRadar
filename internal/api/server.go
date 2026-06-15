@@ -26,6 +26,7 @@ func NewServer(st *store.Store, log *slog.Logger, userID int64) http.Handler {
 	})
 	mux.HandleFunc("GET /api/companies", s.companies)
 	mux.HandleFunc("POST /api/companies", s.addCompany)
+	mux.HandleFunc("PATCH /api/companies/{id}", s.updateCompany)
 	mux.HandleFunc("DELETE /api/companies/{id}", s.removeCompany)
 	mux.HandleFunc("GET /api/companies/{id}/timeline", s.timeline)
 	mux.HandleFunc("GET /api/companies/{id}/timing", s.timing)
@@ -99,6 +100,25 @@ func (s *Server) addCompany(w http.ResponseWriter, r *http.Request) {
 	s.respond(w, map[string]int64{"id": id}, nil)
 }
 
+func (s *Server) updateCompany(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	var in struct {
+		Priority string `json:"priority"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Priority == "" {
+		http.Error(w, "priority is required", http.StatusBadRequest)
+		return
+	}
+	if err := s.store.UpdateCompanyTier(r.Context(), id, in.Priority); err != nil {
+		s.respond(w, nil, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) removeCompany(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
@@ -135,7 +155,7 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

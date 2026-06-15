@@ -43,10 +43,13 @@ async function get<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-export const getCompanies = () => get<Company[]>("/api/companies");
-export const getTimeline = (id: number) => get<TimelineEvent[]>(`/api/companies/${id}/timeline`);
-export const getPostings = () => get<OpenPosting[]>("/api/postings");
-export const getFirehose = () => get<FirehosePosting[]>("/api/firehose");
+// Go marshals empty slices as null, so coerce list responses to [].
+const arr = <T>(p: Promise<T[] | null>) => p.then((x) => x ?? []);
+
+export const getCompanies = () => arr(get<Company[] | null>("/api/companies"));
+export const getTimeline = (id: number) => arr(get<TimelineEvent[] | null>(`/api/companies/${id}/timeline`));
+export const getPostings = () => arr(get<OpenPosting[] | null>("/api/postings"));
+export const getFirehose = () => arr(get<FirehosePosting[] | null>("/api/firehose"));
 
 export async function addCompany(input: {
   name: string;
@@ -65,4 +68,13 @@ export async function addCompany(input: {
 export async function removeCompany(id: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/companies/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(`remove company → ${res.status}`);
+}
+
+export async function updateTier(id: number, priority: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/companies/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ priority }),
+  });
+  if (!res.ok) throw new Error(`update tier → ${res.status}`);
 }

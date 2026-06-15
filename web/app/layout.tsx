@@ -19,7 +19,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <nav className="mx-auto flex h-16 max-w-6xl items-center gap-8 px-6">
             <Link href="/" className="flex items-center gap-2 font-mono text-sm font-bold tracking-tight text-ink">
               <span className="pulse-soft inline-block h-1.5 w-1.5 rounded-full bg-accent" />
-              req<span className="text-accent">radar</span>
+              Req<span className="text-accent">Radar</span>
             </Link>
             <div className="flex items-center gap-6 font-mono text-[13px]">
               <NavLink href="/">watchlist</NavLink>

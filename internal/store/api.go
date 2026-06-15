@@ -146,6 +146,14 @@ func (s *Store) RemoveWatchlistCompany(ctx context.Context, userID, entityID int
 	return err
 }
 
+// UpdateCompanyTier changes a company's tier (the metadata.priority field).
+func (s *Store) UpdateCompanyTier(ctx context.Context, entityID int64, tier string) error {
+	_, err := s.Pool.Exec(ctx,
+		`UPDATE entities SET metadata = jsonb_set(COALESCE(metadata, '{}'), '{priority}', to_jsonb($2::text))
+		 WHERE id = $1 AND kind = 'company'`, entityID, tier)
+	return err
+}
+
 type FirehosePosting struct {
 	Company   string    `json:"company"`
 	Title     string    `json:"title"`

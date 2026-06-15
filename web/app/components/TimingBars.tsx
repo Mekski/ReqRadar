@@ -1,7 +1,7 @@
 import type { TimingBucket } from "@/lib/api";
 
 // Monthly posting-activity chart. `compact` = the label-less card sparkline.
-export function TimingBars({ timing, compact = false }: { timing: TimingBucket[]; compact?: boolean }) {
+export function TimingBars({ timing, compact = false }: { timing: TimingBucket[] | null; compact?: boolean }) {
   if (!timing || timing.length === 0) {
     return <p className="font-mono text-xs text-dim">no activity</p>;
   }
