@@ -27,7 +27,16 @@ func NewDispatcher(st *store.Store, tg *telegram.Client, log *slog.Logger) *Disp
 // Handle dispatches one event. Firehose events (broad, non-watchlist) go to all
 // users; watchlist events go to that entity's watchers with latency recorded.
 // Events reaching here are already new (the consumer uses DeliverNew).
+// alertFreshness gates alerts to roles actually posted recently. Events are
+// always STORED (timing/history), but we only Telegram-alert on fresh ones — so
+// newly-tracking a company or running a backfill imports its existing roles
+// silently instead of flooding. Matches job-watch's "only new rows" behavior.
+const alertFreshness = 48 * time.Hour
+
 func (d *Dispatcher) Handle(ctx context.Context, e signal.Event) error {
+	if time.Since(e.EventTime) > alertFreshness {
+		return nil // role wasn't posted recently — stored, but not alert-worthy
+	}
 	if e.Type == "firehose" {
 		return d.handleFirehose(ctx, e)
 	}

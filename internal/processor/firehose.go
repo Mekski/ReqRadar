@@ -36,6 +36,6 @@ func (p *Processor) maybeFirehose(ctx context.Context, raw signal.RawSignal, pos
 	data, _ := json.Marshal(map[string]any{
 		"company": post.Company, "title": post.Title, "url": post.URL, "category": post.Category,
 	})
-	p.publish(signal.Event{Type: "firehose", ObservedAt: raw.ObservedAt, Data: data})
+	p.publish(signal.Event{Type: "firehose", EventTime: raw.EventTime, ObservedAt: raw.ObservedAt, Data: data})
 	return nil
 }
