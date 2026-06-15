@@ -145,7 +145,7 @@ companies:
     domain: google.com
     priority: S
     aliases: [google, google llc, alphabet, google deepmind, deepmind]
-    expected_estimate: Oct # opens ~mid-Oct of the prior year, short 2–4 week window (Simplify FAQ)
+    expected_estimate: Aug # opens around August (Mark's recruiting experience; an earlier Simplify-FAQ-sourced "Oct" was overridden)
 
   - canonical_name: Apple
     domain: apple.com
