@@ -1,6 +1,6 @@
 # Alert-loss trio (H1 / H2 / H3)
 
-**Status:** H3 fixed (2026-06-15); H1 + H2 open
+**Status:** all fixed (2026-06-15) — H3 via consumer redelivery caps; H1 + H2 via a transactional outbox with hybrid (inline + relay) publishing
 **Source:** [2026-06-15 progress audit](../audits/2026-06-15-progress-audit.md)
 **Theme:** three ways a genuinely-new posting's alert can be **silently dropped or stalled**. None corrupt data — Postgres stays correct — they are *alert-delivery* reliability gaps. They matter because the headline claim is "sub-minute detection-to-alert," and they are exactly what an interviewer probes when you say "event-driven, at-least-once delivery."
 
@@ -16,27 +16,25 @@ Findings H1 and H2 are two faces of the same **dual-write problem**: the process
 
 ---
 
-## H2 — publish-after-commit (primary)
+## H2 — publish-after-commit (primary) — FIXED
 
-**Where:** [internal/processor/processor.go:169-175](../../internal/processor/processor.go#L169) (commit then publish) and [internal/processor/processor.go:193-202](../../internal/processor/processor.go#L193) (`publish` logs on failure, does not propagate).
+**Fixed (transactional outbox, hybrid publish):** the event is now staged into an `event_outbox` table *inside the same transaction* as the posting/event writes (migration `000007`). After commit it is published **inline** (happy path stays sub-second), and on success the row is marked published. A relay goroutine (`RelayOutbox`, every 2s) resends any rows a failed inline publish left behind. So a NATS hiccup at commit time can no longer permanently drop an alert, and the 607ms detect-to-alert latency is preserved. Verified by `TestProcessorStateMachine` (outbox row published inline) and `TestProcessorOutboxRelay` (straggler resent exactly once, no duplicate).
 
-**Mechanism:** the DB transaction commits the `postings` + `events` rows first; then `p.publish` sends to NATS and, on failure, only logs (`// publish only delays the alert. Logged, not fatal.`). If NATS is briefly unavailable at that moment, the event is permanently in Postgres but was **never enqueued**, so the dispatcher never sees it → no alert. On the next poll the same posting re-arrives, its content hash matches the stored row, and processing takes the `default:` "unchanged" branch ([processor.go:159](../../internal/processor/processor.go#L159)) — so it **never re-emits**. The alert is lost for good, and nothing looks broken.
+**Original mechanism (for the record):** the DB transaction committed the `postings` + `events` rows first; then `p.publish` sent to NATS and, on failure, only logged. If NATS was briefly unavailable, the event was permanently in Postgres but **never enqueued**, so no alert. On the next poll the same posting re-arrived, its content hash matched, and processing took the `default:` "unchanged" branch ([processor.go:163](../../internal/processor/processor.go#L163)) — so it **never re-emitted**. Alert lost for good, nothing looked broken.
 
-**Why the obvious fix doesn't work:** "return an error so NATS re-delivers the signal" fails because the transaction already committed — on redelivery the posting exists and is unchanged, so no event is re-emitted.
+**Why the obvious fix didn't work:** "return an error so NATS re-delivers the signal" fails because the transaction already committed — on redelivery the posting exists and is unchanged, so no event is re-emitted. The outbox sidesteps this by staging the publish atomically with the commit.
 
-**Recommended fix — transactional outbox:** inside the same transaction that writes the posting/event, also insert the to-be-published message into an `event_outbox` table. A relay (a goroutine in the processor) polls unpublished outbox rows, publishes them to NATS, and marks them published. Now the publish cannot be lost: a failed publish leaves the row un-marked and it is retried. This is the textbook fix for dual-write inconsistency and a strong interview answer. Replay stays idempotent (the relay is the only publisher).
+**Design note (hybrid, not relay-only):** an earlier draft of this plan said "the relay is the only publisher." That was wrong — it would make every alert wait for the next relay tick, regressing the headline latency. The shipped design publishes inline and uses the relay only as a backstop. (Credit: caught in a second-opinion review.) Guarantee is **at-least-once**: a crash between a successful publish and the mark yields at most one duplicate, which the alert path and the 48h freshness gate tolerate.
 
 **Cheaper alternative (rejected):** re-publish on a "committed but unpublished" scan keyed off the `events` table — but firehose events (H1) have no `events` row, so a uniform outbox is cleaner and covers both.
 
 ---
 
-## H1 — firehose marked "seen" before publish
+## H1 — firehose marked "seen" before publish — FIXED
 
-**Where:** [internal/processor/firehose.go:29-40](../../internal/processor/firehose.go#L29).
+**Fixed:** `maybeFirehose` now runs `MarkFirehoseSeenTx` + `InsertOutbox` in **one transaction**, then publishes inline (same hybrid path as H2). "Recorded seen" and "will be published" commit together, so a publish failure no longer leaves a seen-but-never-alerted posting. Verified by `TestProcessorFirehose` (firehose outbox row published).
 
-**Mechanism:** `MarkFirehoseSeen` writes the dedup row **before** the `events.firehose` is published. If the publish then fails, the posting is already recorded as seen, so on the next poll `isNew` is false ([firehose.go:33](../../internal/processor/firehose.go#L33)) and it returns early without ever publishing. Dropped firehose alert — same outcome as H2, different spot.
-
-**Recommended fix:** route firehose events through the **same outbox** as H2 (insert the firehose event into `event_outbox` in the same tx as the `firehose_seen` write). This makes "recorded seen" and "will be published" atomic. A naive reorder (publish first, then mark seen) only swaps the failure mode to *double*-alerting, so the outbox is the clean answer here too.
+**Original mechanism (for the record):** `MarkFirehoseSeen` wrote the dedup row **before** the `events.firehose` publish. If the publish failed, the posting was already recorded as seen, so on the next poll `isNew` was false and it returned early without ever publishing. Dropped firehose alert — same outcome as H2, different spot. (A naive reorder — publish first, then mark seen — only swaps the failure mode to *double*-alerting, which is why the outbox is the right answer here too.)
 
 ---
 
@@ -59,9 +57,14 @@ Findings H1 and H2 are two faces of the same **dual-write problem**: the process
 
 ---
 
-## Fix plan & sequencing
+## Fix plan & sequencing — DONE
 
-1. **H3** first — independent, low-risk, and directly testable (a poison message must be delivered exactly `MaxDeliver` times then stop). No schema change.
-2. **H1 + H2 together** via one `event_outbox` table + relay — they are the same dual-write problem; one mechanism fixes both. Requires a forward-only migration, store methods, a relay goroutine in `cmd/processor`, and tests (publish failure does not drop; replay stays idempotent).
+1. **H3** ✅ — consumer redelivery caps in `internal/bus/bus.go`; verified by `internal/bus/bus_integration_test.go`.
+2. **H1 + H2** ✅ — one `event_outbox` table + hybrid (inline publish + relay backstop) fixes both. Migration `000007`, store methods in `internal/store/outbox.go`, staging in `processor.go`/`firehose.go`, relay goroutine in `cmd/processor`, tests in `internal/processor/integration_test.go`.
 
-Each fix updates this doc's status and is recorded in [../changelog.md](../changelog.md) with its commit.
+**Follow-ups (not blocking):**
+- Add a Prometheus gauge on the unpublished-outbox backlog once metrics infra exists (DESIGN §7) — today the relay logs each non-empty sweep.
+- Consider a periodic prune of old published `event_outbox` rows (they accumulate; a `published_at < now() - 7d` delete keeps the table small). Low urgency at this volume.
+- Unify `MarkFirehoseSeen` / `MarkFirehoseSeenTx` once concurrent edits to `api.go` settle.
+
+Each fix is recorded in [../changelog.md](../changelog.md) with its commit.

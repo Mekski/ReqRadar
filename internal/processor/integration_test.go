@@ -123,7 +123,7 @@ func truncate(t *testing.T, st *store.Store) {
 	// truncate via their parent.
 	_, err := st.Pool.Exec(context.Background(), `
 		TRUNCATE entities, entity_aliases, sources, postings, posting_versions,
-		         events, raw_signals, resolution_decisions, firehose_seen
+		         events, raw_signals, resolution_decisions, firehose_seen, event_outbox
 		RESTART IDENTITY CASCADE`)
 	if err != nil {
 		t.Fatalf("truncate: %v", err)
@@ -216,6 +216,14 @@ func TestProcessorStateMachine(t *testing.T) {
 	if got := countRows(t, h.st, `SELECT count(*) FROM raw_signals`); got != 1 {
 		t.Fatalf("raw_signals after open = %d, want 1", got)
 	}
+	// The event was staged in the outbox and published inline (NATS is up), so
+	// the row exists and is marked published (alert-loss-trio H2).
+	if got := countRows(t, h.st, `SELECT count(*) FROM event_outbox`); got != 1 {
+		t.Fatalf("event_outbox after open = %d, want 1", got)
+	}
+	if got := countRows(t, h.st, `SELECT count(*) FROM event_outbox WHERE published_at IS NOT NULL`); got != 1 {
+		t.Errorf("outbox row should be published inline, got %d published", got)
+	}
 
 	// --- 2. Identical re-delivery -> idempotent touch, no new event -------
 	t1 := t0.Add(5 * time.Minute)
@@ -280,6 +288,10 @@ func TestProcessorFirehose(t *testing.T) {
 	if got := countRows(t, h.st, `SELECT count(*) FROM postings`); got != 0 {
 		t.Errorf("firehose must not create postings, got %d", got)
 	}
+	// Firehose event staged + published via the same outbox path (H1).
+	if got := countRows(t, h.st, `SELECT count(*) FROM event_outbox WHERE subject='events.firehose' AND published_at IS NOT NULL`); got != 1 {
+		t.Errorf("firehose outbox row should be published, got %d", got)
+	}
 
 	// Re-delivery -> deduped, still one row.
 	if err := h.proc.Handle(ctx, fh); err != nil {
@@ -296,5 +308,48 @@ func TestProcessorFirehose(t *testing.T) {
 	}
 	if got := countRows(t, h.st, `SELECT count(*) FROM firehose_seen`); got != 1 {
 		t.Errorf("non-firehose category should be ignored, firehose_seen = %d, want 1", got)
+	}
+}
+
+// TestProcessorOutboxRelay verifies the transactional-outbox backstop (H1/H2):
+// an event a failed inline publish left unpublished is resent by RelayOutbox,
+// exactly once (a second sweep is a no-op — no duplicate).
+func TestProcessorOutboxRelay(t *testing.T) {
+	h := setup(t)
+	ctx := context.Background()
+
+	// Create a posting; its event is staged and published inline.
+	open := sig("relay-1", "hash-R", listingPayload("Testco", "SWE Intern", "https://testco.test/r", "Software Engineering"), time.Now())
+	if err := h.proc.Handle(ctx, open); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	// Simulate a failed inline publish: reset the row to unpublished (a straggler).
+	if _, err := h.st.Pool.Exec(ctx, `UPDATE event_outbox SET published_at = NULL`); err != nil {
+		t.Fatalf("reset outbox: %v", err)
+	}
+	if got := countRows(t, h.st, `SELECT count(*) FROM event_outbox WHERE published_at IS NULL`); got != 1 {
+		t.Fatalf("setup: want 1 unpublished row, got %d", got)
+	}
+
+	// First sweep republishes it and marks it published.
+	n, err := h.proc.RelayOutbox(ctx, 100)
+	if err != nil {
+		t.Fatalf("relay: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("first relay sweep republished %d, want 1", n)
+	}
+	if got := countRows(t, h.st, `SELECT count(*) FROM event_outbox WHERE published_at IS NULL`); got != 0 {
+		t.Errorf("after relay, unpublished rows = %d, want 0", got)
+	}
+
+	// Second sweep is a no-op — the row is published, so it is not resent (no dup).
+	n, err = h.proc.RelayOutbox(ctx, 100)
+	if err != nil {
+		t.Fatalf("relay 2: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("second relay sweep republished %d, want 0 (no duplicate)", n)
 	}
 }

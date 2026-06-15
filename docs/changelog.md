@@ -4,6 +4,15 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Fix H1 + H2 — transactional outbox (alert-loss trio)
+The processor wrote to Postgres *and* published to NATS as a dual write; a publish failure after commit (H2) or after marking a firehose posting seen (H1) silently dropped the alert forever. Fixed with a **transactional outbox**:
+- New `event_outbox` table (migration `000007`); events are staged in the **same transaction** as their posting/firehose writes.
+- **Hybrid publishing:** publish inline right after commit (latency stays sub-second — the 607ms claim is preserved), mark the row published; a relay goroutine (`RelayOutbox`, every 2s in `cmd/processor`) resends any rows a failed inline publish left behind. At-least-once (a crash between publish and mark yields at most one duplicate, tolerated by the 48h freshness gate).
+- `maybeFirehose` now runs `MarkFirehoseSeenTx` + `InsertOutbox` in one tx (closes H1). New store code isolated in `internal/store/outbox.go` to avoid touching `api.go` (concurrent edits).
+- Tests: `TestProcessorStateMachine`/`TestProcessorFirehose` assert inline-published outbox rows; `TestProcessorOutboxRelay` asserts the backstop resends a straggler exactly once (no duplicate).
+- **Design correction (second-opinion review):** an earlier plan made the relay the *only* publisher, which would have regressed latency to the relay tick. Switched to inline + relay-backstop before implementing.
+- Follow-ups: Prometheus gauge on outbox backlog (once metrics infra lands); periodic prune of old published rows. See [issues/alert-loss-trio.md](issues/alert-loss-trio.md).
+
 ### Fix H3 — consumer redelivery cap (alert-loss trio)
 `internal/bus/bus.go`: both JetStream consumers now set `MaxDeliver(5)`, `AckWait(30s)`, `BackOff([30s, 2m, 5m])`, so a poison message can't be redelivered in an infinite loop (CPU/log spin + head-of-line blocking). Added `internal/bus/bus_integration_test.go` to assert the created consumers carry the config, and wired it into the CI `integration` job.
 - **Found via the test (not assumed):** when `BackOff` is set, NATS uses `BackOff[0]` as the ack deadline and overrides `AckWait`. With `BackOff[0]=5s` and the dispatcher's 10s Telegram timeout, a slow-but-successful send would be redelivered → duplicate alert. Fixed by setting `BackOff[0]=30s`.

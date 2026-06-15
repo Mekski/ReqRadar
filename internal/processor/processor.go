@@ -166,12 +166,29 @@ func (p *Processor) persist(ctx context.Context, raw signal.RawSignal, sourceID,
 		}
 	}
 
+	// Stage the event in the outbox inside the same tx as its DB writes, so a
+	// committed event can never be lost relative to its NATS publish (the
+	// transactional-outbox pattern; alert-loss-trio H2).
+	var outboxID int64
+	var subject string
+	var payload []byte
+	if emit != nil {
+		subject = bus.EventsPrefix + emit.Type
+		payload, _ = json.Marshal(*emit)
+		outboxID, err = p.store.InsertOutbox(ctx, tx, subject, payload)
+		if err != nil {
+			return fmt.Errorf("insert outbox: %w", err)
+		}
+	}
+
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
 
+	// Happy path: publish inline so latency stays sub-second. A failure here is
+	// non-fatal — the row stays unpublished and the relay (RelayOutbox) resends.
 	if emit != nil {
-		p.publish(*emit)
+		p.publishStaged(ctx, outboxID, subject, payload)
 	}
 	return nil
 }
@@ -190,17 +207,48 @@ func (p *Processor) makeEvent(ctx context.Context, tx store.DBTX, entityID int64
 	}, nil
 }
 
-func (p *Processor) publish(e signal.Event) {
-	data, err := json.Marshal(e)
-	if err != nil {
-		p.log.Error("marshal event", "err", err)
+// publishStaged sends a staged outbox event and, on success, marks it published
+// so the relay won't resend it. A failure is non-fatal: the row stays unpublished
+// and RelayOutbox retries. This is at-least-once — a crash between a successful
+// publish and the mark yields at most one duplicate, which the alert path
+// tolerates (and the dispatcher's freshness gate bounds).
+func (p *Processor) publishStaged(ctx context.Context, id int64, subject string, payload []byte) {
+	if err := p.bus.Publish(subject, payload); err != nil {
+		p.log.Warn("inline publish failed; relay will retry", "subject", subject, "outbox_id", id, "err", err)
 		return
 	}
-	if err := p.bus.Publish(bus.EventsPrefix+e.Type, data); err != nil {
-		// The event is committed in Postgres (the source of truth); a failed
-		// publish only delays the alert. Logged, not fatal.
-		p.log.Error("publish event", "type", e.Type, "event_id", e.EventID, "err", err)
+	if err := p.store.MarkOutboxPublished(ctx, p.store.Pool, id); err != nil {
+		p.log.Error("mark outbox published", "outbox_id", id, "err", err)
 	}
+}
+
+// RelayOutbox publishes staged events that a prior inline publish failed to send
+// — the transactional-outbox backstop. Inline publish (publishStaged) is the
+// happy path that keeps latency sub-second; this sweep guarantees a NATS hiccup
+// at commit time never permanently drops an alert. Returns the count republished.
+// (Observability for now is a log line per non-empty sweep; a Prometheus gauge on
+// the unpublished backlog is the upgrade once metrics infra lands — DESIGN §7.)
+func (p *Processor) RelayOutbox(ctx context.Context, limit int) (int, error) {
+	rows, err := p.store.UnpublishedOutbox(ctx, limit)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, r := range rows {
+		if err := p.bus.Publish(r.Subject, r.Payload); err != nil {
+			p.log.Warn("relay publish failed; will retry next sweep", "subject", r.Subject, "outbox_id", r.ID, "err", err)
+			continue
+		}
+		if err := p.store.MarkOutboxPublished(ctx, p.store.Pool, r.ID); err != nil {
+			p.log.Error("relay mark published", "outbox_id", r.ID, "err", err)
+			continue
+		}
+		n++
+	}
+	if n > 0 {
+		p.log.Info("relayed staged events", "count", n)
+	}
+	return n, nil
 }
 
 // recordDecision logs each unique raw company string to the resolution audit

@@ -82,6 +82,24 @@ func main() {
 		}
 	}()
 
+	// Transactional-outbox relay: resend events a failed inline publish left
+	// unpublished. Inline publish is the happy path (sub-second); this is the
+	// backstop that guarantees a NATS hiccup never permanently drops an alert.
+	go func() {
+		t := time.NewTicker(2 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if _, err := proc.RelayOutbox(ctx, 100); err != nil {
+					log.Error("outbox relay", "err", err)
+				}
+			}
+		}
+	}()
+
 	log.Info("processor consuming signals.raw.*")
 	<-ctx.Done()
 	log.Info("shutting down")

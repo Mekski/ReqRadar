@@ -3,7 +3,9 @@ package processor
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
+	"github.com/Mekski/reqradar/internal/bus"
 	"github.com/Mekski/reqradar/internal/signal"
 )
 
@@ -22,20 +24,43 @@ var firehoseCategories = map[string]bool{
 // maybeFirehose handles a posting that did NOT resolve to a watchlist entity: if
 // it's in the firehose categories and we haven't seen it, emit an events.firehose
 // for the dispatcher. No entity/posting/event rows — firehose is alert-only.
+//
+// The "seen" mark and the outbox insert run in one transaction (alert-loss-trio
+// H1): otherwise a publish failure after marking-seen would drop the alert and
+// the dedup would suppress it forever. Inline publish after commit keeps latency
+// sub-second; the relay backstops a failed publish.
 func (p *Processor) maybeFirehose(ctx context.Context, raw signal.RawSignal, post Posting) error {
 	if !firehoseCategories[post.Category] {
 		return nil
 	}
-	isNew, err := p.store.MarkFirehoseSeen(ctx, raw.Source, raw.ExternalID, post.Company, post.Title, post.URL, post.Category)
+
+	tx, err := p.store.Pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	isNew, err := p.store.MarkFirehoseSeenTx(ctx, tx, raw.Source, raw.ExternalID, post.Company, post.Title, post.URL, post.Category)
 	if err != nil {
 		return err
 	}
 	if !isNew {
-		return nil
+		return nil // already seen — rolled back by the deferred Rollback
 	}
+
 	data, _ := json.Marshal(map[string]any{
 		"company": post.Company, "title": post.Title, "url": post.URL, "category": post.Category,
 	})
-	p.publish(signal.Event{Type: "firehose", EventTime: raw.EventTime, ObservedAt: raw.ObservedAt, Data: data})
+	payload, _ := json.Marshal(signal.Event{Type: "firehose", EventTime: raw.EventTime, ObservedAt: raw.ObservedAt, Data: data})
+	subject := bus.EventsPrefix + "firehose"
+	outboxID, err := p.store.InsertOutbox(ctx, tx, subject, payload)
+	if err != nil {
+		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit firehose: %w", err)
+	}
+
+	p.publishStaged(ctx, outboxID, subject, payload)
 	return nil
 }
