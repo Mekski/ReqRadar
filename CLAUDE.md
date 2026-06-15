@@ -4,6 +4,18 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 **Read DESIGN.md before making any architectural change.** It is the locked design; §10 (rejected alternatives) lists decisions that must not be silently re-introduced.
 
+## Where things stand & where to pick up (2026-06-15)
+
+**Working end-to-end, CI green, on `main`:** the full collector → NATS → processor → Postgres pipeline (Milestone A); watchlist + firehose Telegram alerts and the REST API (Milestone B backend); and a Next.js dashboard. The dev DB holds ~3 years of backfilled timing for 13/15 companies and a primed firehose (~944 rows). Telegram works (bot @ReqRadarBot, 607ms detect-to-alert verified).
+
+**Check `git status` first.** A dashboard **redesign** (mission-control/radar aesthetic — dark, amber signal accent, Chakra Petch + IBM Plex fonts) may be present in `web/` **uncommitted on disk** — it builds clean and renders, but Mark likes the look yet wants **UX changes** (to be specified). Do NOT treat the current dashboard UX as final. The functional dashboard *was* committed earlier; the redesign sits on top.
+
+**Pick up here** (all OPTIONAL — no deadline; deployment is deliberately deferred):
+1. **Dashboard UX changes** — the active thread. Mark will specify what to change.
+2. **More collectors:** greenhouse/ashby/hn. Factories are already wired; just add `internal/collector/<name>` packages + one `r.Register` line in `cmd/collector`. Verified slugs in WATCHLIST.md. (Greenhouse/Ashby pull a company's WHOLE board incl. full-time — filter to internships.)
+3. **`posting_closed` detection** — makes "open" counts truthful (currently inflated; see gotchas).
+4. **Free deployment + CI deploy step** — Oracle Cloud Always Free / Fly.io. Mark won't pay (see memory `prefers-free-tooling`). Only unbacked resume claim is "deployed to prod."
+
 ## Build status & run order (updated 2026-06-13)
 
 **✅ MILESTONE A COMPLETE (tasks 1–8).** Full pipeline verified live, CI green: collector (poll + backfill) → NATS → processor (`internal/processor`: durable consumer over `signals.raw.*`, normalize → resolve alias/domain + watchlist filter → tx-per-signal dedupe → Postgres → emit `events.*`). Idempotent (5,609 dupe signals → 104 postings/events). Backfill (`cmd/backfill`) samples git-history snapshots → **1,119 watchlist events spanning 2023-07 to 2026-06**, 13/15 companies. **Next: Milestone B** — api service + Telegram alert dispatcher (consume `events.*`, fire alerts, instrument `detect_to_alert_ms`) + Next.js dashboard.
@@ -18,9 +30,7 @@ Backfill: `make backfill` (needs `GITHUB_TOKEN`; `gh auth token` works) while th
 
 REMAINING Milestone B: more collectors (greenhouse/ashby/hn — factories exist, just need the collector packages), CI/CD deploy step, prod VM (Caddy serving web + proxying /api). Then dashboard aesthetics pass.
 
-NATS has no mounted volume, so `docker compose up -d --force-recreate nats` purges all streams/durables (clean slate for testing). detect_to_alert_ms is measured from signal ObservedAt → send; huge values = stale queued signals (e.g. from a dirty test backlog), not a bug.
-
-Background-run gotcha: `go run ./cmd/X` spawns a child `exe` process; `kill` on the `go run` PID may not stop it. Use `make run-X` then `pkill -f exe/X`, or build first, when testing services in the background.
+Operational gotchas are consolidated in **Gotchas & operational learnings** below.
 
 Local run order (needs Docker + Go 1.26; secrets in `.env`, gitignored):
 1. `make dev-up` — postgres, nats (+JetStream), prometheus, grafana
@@ -32,6 +42,21 @@ Local run order (needs Docker + Go 1.26; secrets in `.env`, gitignored):
 7. `make firehose-prime` — run ONCE before arming the firehose (records current backlog silently so ~1,000 active postings don't all alert)
 
 Verify data flow: NATS monitoring `http://localhost:8222/jsz?streams=1` (SIGNALS message count); `collector_runs` table for per-run health (status/signal_count/error). Telegram bot is **@ReqRadarBot**, connectivity test already delivered.
+
+## Gotchas & operational learnings (hard-won — read before debugging)
+
+- **`go run ./cmd/X` in background:** it spawns a child `exe`; killing the `go run` PID may leave the child running. Use `pkill -f exe/X` (or build a binary first). A stray collector once polled for hours this way and dumped ~4× duplicate signals into NATS.
+- **Purge NATS for a clean test:** NATS has **no mounted volume**, so `docker compose up -d --force-recreate nats` wipes all streams + durable consumers. Do this when a dirty backlog skews a test.
+- **`detect_to_alert_ms`** is measured from the signal's `ObservedAt` → send. Huge values (hours) = stale/redelivered queued signals, NOT a bug. A clean run is ~600ms.
+- **Backfill-vs-alert suppression uses JetStream `DeliverNew`**, not an `event_time` filter — a newly-detected posting can carry an old `date_posted`, so a time filter would wrongly suppress real alerts.
+- **Current `listings.json` only spans the live cycle (~8 months).** Multi-year history comes from sampling PAST git commits (cycle-boundary snapshots carry older `date_posted`). The backfiller samples ~every 60 days back to Aug 2023.
+- **Backfill sets `ObservedAt = now`,** so `postings.first_seen` is NOT meaningful for "recently posted" ordering after a backfill. Order timing by `event_time` (= `date_posted`).
+- **`posting_closed` is deferred,** so `postings.status` is always `'open'` → "open postings" counts are inflated (= all postings ever seen). The dashboard labels this "tracked" to stay honest. Implementing closure detection is a real next task.
+- **Resolver is in-memory and reloads every 30s** (atomic pointer in `internal/processor/resolve.go`). A company added via the dashboard/seed resolves within ~30s, no restart. Side effects of adding a company: a small burst of `posting_opened` alerts for its currently-open roles, and empty historical timing until `make backfill` is re-run.
+- **Firehose must be primed once** (`make firehose-prime`) before arming, or ~1,000 already-open postings all alert at once. Prime skips watchlist companies (so `firehose_seen` stays non-watchlist-only).
+- **`next/font/google` needs network at build/dev time** (Chakra Petch + IBM Plex Sans/Mono). The env has network (npm + fonts resolved fine); if ever offline, self-host the woff2 or fall back to system fonts.
+- **Company logos** are free via `logo.clearbit.com/{domain}` (we store `domain`); render on a light tile so dark logos read on the dark UI.
+- **`GITHUB_TOKEN`** is needed for backfill (commits API rate limit); `gh auth token` supplies one.
 
 ## Package layout
 
