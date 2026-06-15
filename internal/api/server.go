@@ -30,6 +30,7 @@ func NewServer(st *store.Store, log *slog.Logger, userID int64) http.Handler {
 	mux.HandleFunc("DELETE /api/companies/{id}", s.removeCompany)
 	mux.HandleFunc("GET /api/companies/{id}/timeline", s.timeline)
 	mux.HandleFunc("GET /api/companies/{id}/timing", s.timing)
+	mux.HandleFunc("GET /api/companies/{id}/seasonality", s.seasonality)
 	mux.HandleFunc("GET /api/postings", s.postings)
 	mux.HandleFunc("GET /api/firehose", s.firehose)
 	return cors(mux)
@@ -55,6 +56,15 @@ func (s *Server) timing(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data, err := s.store.CompanyTiming(r.Context(), id)
+	s.respond(w, data, err)
+}
+
+func (s *Server) seasonality(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	data, err := s.store.CompanySeasonality(r.Context(), id)
 	s.respond(w, data, err)
 }
 

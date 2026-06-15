@@ -3,6 +3,7 @@
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export type TimingBucket = { month: string; count: number };
+export type SeasonBucket = { month: number; count: number }; // month 1–12
 
 export type Company = {
   id: number;
@@ -48,6 +49,7 @@ const arr = <T>(p: Promise<T[] | null>) => p.then((x) => x ?? []);
 
 export const getCompanies = () => arr(get<Company[] | null>("/api/companies"));
 export const getTimeline = (id: number) => arr(get<TimelineEvent[] | null>(`/api/companies/${id}/timeline`));
+export const getSeasonality = (id: number) => arr(get<SeasonBucket[] | null>(`/api/companies/${id}/seasonality`));
 export const getPostings = () => arr(get<OpenPosting[] | null>("/api/postings"));
 export const getFirehose = () => arr(get<FirehosePosting[] | null>("/api/firehose"));
 

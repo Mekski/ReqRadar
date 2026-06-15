@@ -290,6 +290,34 @@ type TimingBucket struct {
 	Count int    `json:"count"`
 }
 
+type SeasonBucket struct {
+	Month int `json:"month"` // 1–12
+	Count int `json:"count"`
+}
+
+// CompanySeasonality aggregates posting_opened events by month-of-year across ALL
+// years — the seasonal pattern that answers "when does this company open roles?"
+// (distinct from CompanyTiming's recent month-by-month timeline).
+func (s *Store) CompanySeasonality(ctx context.Context, entityID int64) ([]SeasonBucket, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT EXTRACT(MONTH FROM event_time)::int AS m, count(*)
+		 FROM events WHERE entity_id = $1 AND type = 'posting_opened'
+		 GROUP BY m ORDER BY m`, entityID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SeasonBucket
+	for rows.Next() {
+		var b SeasonBucket
+		if err := rows.Scan(&b.Month, &b.Count); err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
 // CompanyTiming returns the monthly posting-open histogram — the flagship
 // "when do they historically open apps" feature.
 func (s *Store) CompanyTiming(ctx context.Context, entityID int64) ([]TimingBucket, error) {
