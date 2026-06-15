@@ -1,0 +1,17 @@
+# golangci-lint v2 config. Keeps the standard linter set (errcheck, govet,
+# ineffassign, staticcheck, unused) and excludes errcheck only for the
+# conventional "ignore the error on deferred cleanup / best-effort write"
+# functions — so it still catches genuinely unchecked errors elsewhere.
+version: "2"
+
+linters:
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (io.ReadCloser).Close
+        - (net/http.ResponseWriter).Write
+        - (*net/http.Server).Shutdown
+        - (*github.com/nats-io/nats.go.Subscription).Unsubscribe
+        - (github.com/jackc/pgx/v5.Tx).Rollback
+        - (*github.com/golang-migrate/migrate/v4.Migrate).Close
