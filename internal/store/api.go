@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/Mekski/reqradar/internal/entity"
 )
 
 // ---- Alert dispatcher ----
@@ -82,15 +84,106 @@ func (s *Store) FirstUserID(ctx context.Context) (int64, error) {
 	return id, err
 }
 
+// ---- Watchlist editing (seed + dashboard share this) ----
+
+// CompanyInput is the data needed to add/update a watchlist company.
+type CompanyInput struct {
+	Name     string
+	Domain   string
+	Priority string
+	Source   string   // 'seed' | 'manual'
+	Aliases  []string // raw; normalized + canonical-name-added inside UpsertCompany
+}
+
+// UpsertCompany creates or updates a company entity, its aliases, and the
+// watchlist row for userID — the one definition shared by cmd/seed and the
+// POST /api/companies handler. Runs inside the caller's transaction (q).
+func (s *Store) UpsertCompany(ctx context.Context, q DBTX, userID int64, in CompanyInput) (int64, error) {
+	meta, _ := json.Marshal(map[string]any{"priority": in.Priority})
+	var entityID int64
+	if err := q.QueryRow(ctx,
+		`INSERT INTO entities (kind, canonical_name, domain, metadata)
+		 VALUES ('company', $1, $2, $3)
+		 ON CONFLICT (kind, canonical_name)
+		 DO UPDATE SET domain = EXCLUDED.domain, metadata = EXCLUDED.metadata
+		 RETURNING id`,
+		in.Name, in.Domain, meta).Scan(&entityID); err != nil {
+		return 0, err
+	}
+
+	source := in.Source
+	if source == "" {
+		source = "manual"
+	}
+	seen := map[string]bool{}
+	for _, a := range append([]string{in.Name}, in.Aliases...) {
+		n := entity.Normalize(a)
+		if n == "" || seen[n] {
+			continue
+		}
+		seen[n] = true
+		if _, err := q.Exec(ctx,
+			`INSERT INTO entity_aliases (entity_id, alias, source, confidence)
+			 VALUES ($1, $2, $3, 1.0)
+			 ON CONFLICT (alias) DO UPDATE SET entity_id = EXCLUDED.entity_id, source = EXCLUDED.source, confidence = 1.0`,
+			entityID, n, source); err != nil {
+			return 0, err
+		}
+	}
+
+	if _, err := q.Exec(ctx,
+		`INSERT INTO watchlist (user_id, entity_id, alert_config) VALUES ($1, $2, '{}')
+		 ON CONFLICT (user_id, entity_id) DO NOTHING`, userID, entityID); err != nil {
+		return 0, err
+	}
+	return entityID, nil
+}
+
+// RemoveWatchlistCompany drops the watchlist row only — entity, events, and
+// postings are retained so history survives and re-adding is lossless.
+func (s *Store) RemoveWatchlistCompany(ctx context.Context, userID, entityID int64) error {
+	_, err := s.Pool.Exec(ctx, `DELETE FROM watchlist WHERE user_id = $1 AND entity_id = $2`, userID, entityID)
+	return err
+}
+
+type FirehosePosting struct {
+	Company   string    `json:"company"`
+	Title     string    `json:"title"`
+	URL       string    `json:"url"`
+	Category  string    `json:"category"`
+	FirstSeen time.Time `json:"first_seen"`
+}
+
+// RecentFirehose returns the most recently seen non-watchlist postings.
+func (s *Store) RecentFirehose(ctx context.Context, limit int) ([]FirehosePosting, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT company, title, COALESCE(url, ''), COALESCE(category, ''), first_seen
+		 FROM firehose_seen ORDER BY first_seen DESC LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []FirehosePosting
+	for rows.Next() {
+		var f FirehosePosting
+		if err := rows.Scan(&f.Company, &f.Title, &f.URL, &f.Category, &f.FirstSeen); err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
 // ---- Dashboard reads ----
 
 type CompanySummary struct {
-	ID           int64  `json:"id"`
-	Name         string `json:"name"`
-	Domain       string `json:"domain"`
-	Priority     string `json:"priority"`
-	OpenPostings int    `json:"open_postings"`
-	TotalEvents  int    `json:"total_events"`
+	ID           int64          `json:"id"`
+	Name         string         `json:"name"`
+	Domain       string         `json:"domain"`
+	Priority     string         `json:"priority"`
+	OpenPostings int            `json:"open_postings"`
+	TotalEvents  int            `json:"total_events"`
+	Timing       []TimingBucket `json:"timing"` // last 12 months, for the card sparkline
 }
 
 func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]CompanySummary, error) {
@@ -113,7 +206,50 @@ func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]Company
 		}
 		out = append(out, c)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if err := s.attachTiming(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// attachTiming fills each company's last-12-months posting_opened histogram in
+// one grouped query (avoids an N+1 of per-company /timing calls).
+func (s *Store) attachTiming(ctx context.Context, companies []CompanySummary) error {
+	if len(companies) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(companies))
+	idx := make(map[int64]*CompanySummary, len(companies))
+	for i := range companies {
+		ids[i] = companies[i].ID
+		idx[companies[i].ID] = &companies[i]
+	}
+	rows, err := s.Pool.Query(ctx,
+		`SELECT entity_id, to_char(event_time, 'YYYY-MM') AS month, count(*)
+		 FROM events
+		 WHERE type = 'posting_opened'
+		   AND event_time >= date_trunc('month', now()) - interval '11 months'
+		   AND entity_id = ANY($1)
+		 GROUP BY entity_id, month
+		 ORDER BY entity_id, month`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var entityID int64
+		var b TimingBucket
+		if err := rows.Scan(&entityID, &b.Month, &b.Count); err != nil {
+			return err
+		}
+		if c := idx[entityID]; c != nil {
+			c.Timing = append(c.Timing, b)
+		}
+	}
+	return rows.Err()
 }
 
 type TimelineEvent struct {

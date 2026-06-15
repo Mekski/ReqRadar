@@ -30,6 +30,10 @@ run-processor:
 run-api:
 	go run ./cmd/api
 
+# Run the Next.js dashboard dev server (needs the api running; http://localhost:3000).
+run-web:
+	cd web && npm run dev
+
 # One-shot historical backfill (needs GITHUB_TOKEN; run the processor alongside).
 backfill:
 	go run ./cmd/backfill

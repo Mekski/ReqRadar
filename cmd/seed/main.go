@@ -15,7 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/Mekski/reqradar/internal/config"
-	"github.com/Mekski/reqradar/internal/entity"
+	"github.com/Mekski/reqradar/internal/store"
 )
 
 type seedFile struct {
@@ -66,13 +66,13 @@ func main() {
 	}
 
 	ctx := context.Background()
-	conn, err := pgx.Connect(ctx, config.Load().PostgresDSN)
+	st, err := store.Open(ctx, config.Load().PostgresDSN)
 	if err != nil {
-		log.Fatalf("connect: %v", err)
+		log.Fatalf("store open: %v", err)
 	}
-	defer conn.Close(ctx)
+	defer st.Close()
 
-	tx, err := conn.Begin(ctx)
+	tx, err := st.Pool.Begin(ctx)
 	if err != nil {
 		log.Fatalf("begin: %v", err)
 	}
@@ -82,12 +82,15 @@ func main() {
 
 	atsOrgs := map[string][]string{} // platform -> slugs, derived from companies
 	for _, c := range sf.Companies {
-		entityID := upsertEntity(ctx, tx, c)
-		upsertAliases(ctx, tx, entityID, aliasesFor(c))
-		exec(ctx, tx,
-			`INSERT INTO watchlist (user_id, entity_id, alert_config) VALUES ($1, $2, '{}')
-			 ON CONFLICT (user_id, entity_id) DO NOTHING`,
-			userID, entityID)
+		aliases := append([]string{}, c.Aliases...)
+		if c.ATS != nil {
+			aliases = append(aliases, c.ATS.Slug)
+		}
+		if _, err := st.UpsertCompany(ctx, tx, userID, store.CompanyInput{
+			Name: c.CanonicalName, Domain: c.Domain, Priority: c.Priority, Source: "seed", Aliases: aliases,
+		}); err != nil {
+			log.Fatalf("upsert company %s: %v", c.CanonicalName, err)
+		}
 		if c.ATS != nil {
 			atsOrgs[c.ATS.Platform] = append(atsOrgs[c.ATS.Platform], c.ATS.Slug)
 		}
@@ -115,78 +118,27 @@ func upsertUser(ctx context.Context, tx pgx.Tx, name, chatID string) int64 {
 	err := tx.QueryRow(ctx, `SELECT id FROM users WHERE name = $1`, name).Scan(&id)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		mustScan(tx.QueryRow(ctx,
+		if err := tx.QueryRow(ctx,
 			`INSERT INTO users (name, telegram_chat_id) VALUES ($1, $2) RETURNING id`,
-			name, chatID), &id)
+			name, chatID).Scan(&id); err != nil {
+			log.Fatalf("insert user: %v", err)
+		}
 	case err != nil:
 		log.Fatalf("select user: %v", err)
 	default:
-		exec(ctx, tx, `UPDATE users SET telegram_chat_id = $2 WHERE id = $1`, id, chatID)
-	}
-	return id
-}
-
-func upsertEntity(ctx context.Context, tx pgx.Tx, c company) int64 {
-	meta, _ := json.Marshal(map[string]any{"priority": c.Priority})
-	var id int64
-	mustScan(tx.QueryRow(ctx,
-		`INSERT INTO entities (kind, canonical_name, domain, metadata)
-		 VALUES ('company', $1, $2, $3)
-		 ON CONFLICT (kind, canonical_name)
-		 DO UPDATE SET domain = EXCLUDED.domain, metadata = EXCLUDED.metadata
-		 RETURNING id`,
-		c.CanonicalName, c.Domain, meta), &id)
-	return id
-}
-
-// aliasesFor returns the normalized, de-duplicated alias set for a company:
-// the canonical name, every listed alias, and the ATS slug if present.
-func aliasesFor(c company) []string {
-	seen := map[string]bool{}
-	var out []string
-	add := func(s string) {
-		n := entity.Normalize(s)
-		if n != "" && !seen[n] {
-			seen[n] = true
-			out = append(out, n)
+		if _, err := tx.Exec(ctx, `UPDATE users SET telegram_chat_id = $2 WHERE id = $1`, id, chatID); err != nil {
+			log.Fatalf("update user: %v", err)
 		}
 	}
-	add(c.CanonicalName)
-	for _, a := range c.Aliases {
-		add(a)
-	}
-	if c.ATS != nil {
-		add(c.ATS.Slug)
-	}
-	return out
-}
-
-func upsertAliases(ctx context.Context, tx pgx.Tx, entityID int64, aliases []string) {
-	for _, a := range aliases {
-		exec(ctx, tx,
-			`INSERT INTO entity_aliases (entity_id, alias, source, confidence)
-			 VALUES ($1, $2, 'seed', 1.0)
-			 ON CONFLICT (alias) DO UPDATE SET entity_id = EXCLUDED.entity_id, source = 'seed', confidence = 1.0`,
-			entityID, a)
-	}
+	return id
 }
 
 func upsertSource(ctx context.Context, tx pgx.Tx, s source) {
 	cfg, _ := json.Marshal(s.Config)
-	exec(ctx, tx,
+	if _, err := tx.Exec(ctx,
 		`INSERT INTO sources (name, kind, config, enabled) VALUES ($1, $2, $3, $4)
 		 ON CONFLICT (name) DO UPDATE SET kind = EXCLUDED.kind, config = EXCLUDED.config, enabled = EXCLUDED.enabled`,
-		s.Name, s.Kind, cfg, s.Enabled)
-}
-
-func exec(ctx context.Context, tx pgx.Tx, sql string, args ...any) {
-	if _, err := tx.Exec(ctx, sql, args...); err != nil {
-		log.Fatalf("exec: %v\n  sql: %s", err, sql)
-	}
-}
-
-func mustScan(row pgx.Row, dest ...any) {
-	if err := row.Scan(dest...); err != nil {
-		log.Fatalf("scan: %v", err)
+		s.Name, s.Kind, cfg, s.Enabled); err != nil {
+		log.Fatalf("upsert source %s: %v", s.Name, err)
 	}
 }

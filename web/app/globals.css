@@ -1,0 +1,7 @@
+@import "tailwindcss";
+
+/* First pass: fixed light theme so the white cards read correctly. The
+   aesthetics pass can introduce a real theme / dark mode. */
+body {
+  font-family: ui-sans-serif, system-ui, Arial, sans-serif;
+}

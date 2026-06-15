@@ -4,6 +4,7 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/nats-io/nats.go"
 
@@ -63,6 +64,23 @@ func main() {
 		return
 	}
 	defer sub.Unsubscribe()
+
+	// Periodically reload the resolver so dashboard-added companies (and seed
+	// edits) take effect without a restart.
+	go func() {
+		t := time.NewTicker(30 * time.Second)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if err := proc.ReloadResolver(ctx); err != nil {
+					log.Error("resolver reload", "err", err)
+				}
+			}
+		}
+	}()
 
 	log.Info("processor consuming signals.raw.*")
 	<-ctx.Done()

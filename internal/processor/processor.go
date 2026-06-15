@@ -54,6 +54,22 @@ func New(ctx context.Context, st *store.Store, b *bus.Bus, log *slog.Logger) (*P
 	}, nil
 }
 
+// ReloadResolver refreshes the resolver's alias/domain tables from the DB, so
+// companies added via the dashboard (or edits to the seed) take effect without a
+// restart.
+func (p *Processor) ReloadResolver(ctx context.Context) error {
+	aliases, err := p.store.Aliases(ctx)
+	if err != nil {
+		return err
+	}
+	domains, err := p.store.Domains(ctx)
+	if err != nil {
+		return err
+	}
+	p.resolver.Reload(aliases, domains)
+	return nil
+}
+
 // Handle processes one raw signal. It is idempotent: re-delivery of an already
 // stored signal results in a last_seen touch, not a duplicate event, because
 // change detection reads committed posting state.

@@ -25,9 +25,12 @@ func NewServer(st *store.Store, log *slog.Logger, userID int64) http.Handler {
 		w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("GET /api/companies", s.companies)
+	mux.HandleFunc("POST /api/companies", s.addCompany)
+	mux.HandleFunc("DELETE /api/companies/{id}", s.removeCompany)
 	mux.HandleFunc("GET /api/companies/{id}/timeline", s.timeline)
 	mux.HandleFunc("GET /api/companies/{id}/timing", s.timing)
 	mux.HandleFunc("GET /api/postings", s.postings)
+	mux.HandleFunc("GET /api/firehose", s.firehose)
 	return cors(mux)
 }
 
@@ -59,6 +62,55 @@ func (s *Server) postings(w http.ResponseWriter, r *http.Request) {
 	s.respond(w, data, err)
 }
 
+func (s *Server) firehose(w http.ResponseWriter, r *http.Request) {
+	data, err := s.store.RecentFirehose(r.Context(), 200)
+	s.respond(w, data, err)
+}
+
+func (s *Server) addCompany(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Name     string   `json:"name"`
+		Domain   string   `json:"domain"`
+		Priority string   `json:"priority"`
+		Aliases  []string `json:"aliases"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil || in.Name == "" {
+		http.Error(w, "name is required", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	tx, err := s.store.Pool.Begin(ctx)
+	if err != nil {
+		s.respond(w, nil, err)
+		return
+	}
+	defer tx.Rollback(ctx)
+	id, err := s.store.UpsertCompany(ctx, tx, s.userID, store.CompanyInput{
+		Name: in.Name, Domain: in.Domain, Priority: in.Priority, Source: "manual", Aliases: in.Aliases,
+	})
+	if err != nil {
+		s.respond(w, nil, err)
+		return
+	}
+	if err := tx.Commit(ctx); err != nil {
+		s.respond(w, nil, err)
+		return
+	}
+	s.respond(w, map[string]int64{"id": id}, nil)
+}
+
+func (s *Server) removeCompany(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r)
+	if !ok {
+		return
+	}
+	if err := s.store.RemoveWatchlistCompany(r.Context(), s.userID, id); err != nil {
+		s.respond(w, nil, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // respond writes data as JSON, or a 500 on error. A nil slice serializes as [].
 func (s *Server) respond(w http.ResponseWriter, data any, err error) {
 	if err != nil {
@@ -83,7 +135,8 @@ func pathID(w http.ResponseWriter, r *http.Request) (int64, bool) {
 func cors(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

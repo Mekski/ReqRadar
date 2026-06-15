@@ -455,7 +455,7 @@ Tasks are ordered; each depends only on the ones above it unless noted. Check th
 10b. [x] **Two-tier firehose alerts (added 2026-06-14, job-watch parity).** Non-watchlist SWE+AI/ML postings → `firehose_seen` dedup → `events.firehose` → 🆕 Telegram alert to all users. `cmd/firehose-prime` arms it without flooding (skips watchlist companies). Verified: 944 primed silently, 1 simulated-new posting alerted. See §3.2.
 11. [ ] `greenhouse`, `ashby`, `lever` collectors (one file each + config rows — the framework proof)
 12. [ ] `rss` and `hn` collectors
-13. [ ] Next.js dashboard MVP: watchlist view, per-company timeline, open postings, timing-pattern chart from backfill
+13. [x] ~~Next.js dashboard MVP: watchlist view, per-company timeline, open postings, timing-pattern chart from backfill~~ **DONE 2026-06-15.** `web/` Next.js 16 + TS + Tailwind 4. Multi-page: home (company cards w/ logos + CSS-bar timing sparklines + add/remove), company detail (timing chart + tracked postings + activity), firehose feed tab. Watchlist editing wired (POST/DELETE `/api/companies`) with a 30s resolver live-reload so adds take effect without a restart. Verified full stack (Next → Go API → Postgres). Aesthetics polish deferred to a later pass.
 14. [ ] CI/CD: GitHub Actions (lint, test, image build) → GHCR → SSH deploy to VM → post-deploy smoke test (synthetic signal → Telegram within 60s)
 15. [ ] Production VM: Caddy + basic auth, secrets, nightly `pg_dump` backup
 
