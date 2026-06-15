@@ -78,30 +78,35 @@ companies:
     priority: A
     ats: { platform: greenhouse, slug: discord }
     aliases: [discord]
+    expected_estimate: Sep # big-tech fall wave; open month not documented (low confidence)
 
   - canonical_name: Stripe
     domain: stripe.com
     priority: A
     ats: { platform: greenhouse, slug: stripe }
     aliases: [stripe]
+    expected_estimate: Sep # opens early Sept, closes ~mid-Nov (Stripe FAQ / Prosple)
 
   - canonical_name: Figma
     domain: figma.com
     priority: A
     ats: { platform: greenhouse, slug: figma }
     aliases: [figma]
+    expected_estimate: Aug # intern/new-grad roles historically go live ~Aug 15
 
   - canonical_name: Coinbase
     domain: coinbase.com
     priority: B
     ats: { platform: greenhouse, slug: coinbase }
     aliases: [coinbase]
+    expected_estimate: Sep # big-tech fall wave; rolling, open month not documented (low confidence)
 
   - canonical_name: Airbnb
     domain: airbnb.com
     priority: B
     ats: { platform: greenhouse, slug: airbnb }
     aliases: [airbnb]
+    expected_estimate: Sep # big-tech fall wave; rolling until filled, open month not documented (low confidence)
 
   - canonical_name: Pinterest
     domain: pinterest.com
@@ -128,11 +133,13 @@ companies:
     domain: snap.com
     priority: B
     aliases: [snap, snapchat, snap inc]
+    expected_estimate: Sep # big-tech fall wave; open month not documented (low confidence)
 
   - canonical_name: Spotify
     domain: spotify.com
     priority: A
     aliases: [spotify]
+    expected_estimate: Jan # later cycle — ~Feb 5 deadline, mid-June start, so opens ~Dec–Jan
 
   - canonical_name: Google
     domain: google.com
