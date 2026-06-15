@@ -1,7 +1,83 @@
 @import "tailwindcss";
 
-/* First pass: fixed light theme so the white cards read correctly. The
-   aesthetics pass can introduce a real theme / dark mode. */
+/* ===== ReqRadar — minimal dark, cool blue undertones ===== */
+@theme {
+  --color-bg: #0d1421;
+  --color-surface: #161e2e;
+  --color-raised: #1d2638;
+  --color-overlay: #252e44;
+
+  --color-ink: #e8e8ec;
+  --color-muted: #8b8b9e;
+  --color-dim: #5b6273;
+
+  --color-accent: #4f8cff;
+  --color-accent-dark: #1e4cb8;
+
+  --color-line: rgba(79, 140, 255, 0.1);
+  --color-line-strong: rgba(79, 140, 255, 0.2);
+
+  --font-sans: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jbmono), ui-monospace, monospace;
+}
+
+html {
+  color-scheme: dark;
+}
+
 body {
-  font-family: ui-sans-serif, system-ui, Arial, sans-serif;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  /* faint cool glow bleeding from the top — calm, not flashy */
+  background-image: radial-gradient(1100px 520px at 50% -15%, rgba(79, 140, 255, 0.08), transparent 70%);
+  background-attachment: fixed;
+}
+
+@layer utilities {
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+  }
+  /* blue glow + subtle lift on hover — the portfolio's signature interaction */
+  .glow-hover {
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  }
+  .glow-hover:hover {
+    border-color: var(--color-line-strong);
+    box-shadow: 0 0 24px -8px rgba(79, 140, 255, 0.45);
+    transform: translateY(-2px);
+  }
+  /* thin fading gradient divider */
+  .divider {
+    height: 1px;
+    background: linear-gradient(to right, transparent, var(--color-line-strong), transparent);
+  }
+  /* accent underline under section labels */
+  .accent-bar {
+    height: 2px;
+    width: 2.5rem;
+    background: linear-gradient(to right, var(--color-accent), var(--color-accent-dark));
+  }
+  .rise {
+    opacity: 0;
+    animation: rise 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    animation-delay: calc(var(--i, 0) * 40ms);
+  }
+}
+
+@keyframes rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.pulse-soft { animation: pulse-soft 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rise, .pulse-soft { animation: none; opacity: 1; }
+  .glow-hover:hover { transform: none; }
 }

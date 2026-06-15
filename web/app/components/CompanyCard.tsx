@@ -7,13 +7,20 @@ import { type Company, removeCompany } from "@/lib/api";
 import { Logo } from "./Logo";
 import { TimingBars } from "./TimingBars";
 
-const priorityStyle: Record<string, string> = {
-  top: "bg-green-100 text-green-700",
-  mid: "bg-blue-100 text-blue-700",
-  low: "bg-gray-100 text-gray-500",
-};
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-export function CompanyCard({ company }: { company: Company }) {
+function lastActive(timing: Company["timing"]): string {
+  if (!timing || timing.length === 0) return "—";
+  for (let i = timing.length - 1; i >= 0; i--) {
+    if (timing[i].count > 0) {
+      const [y, m] = timing[i].month.split("-");
+      return `${MONTHS[Number(m) - 1]} '${y.slice(2)}`;
+    }
+  }
+  return "—";
+}
+
+export function CompanyCard({ company, index = 0 }: { company: Company; index?: number }) {
   const router = useRouter();
   const [removing, setRemoving] = useState(false);
 
@@ -30,37 +37,29 @@ export function CompanyCard({ company }: { company: Company }) {
   }
 
   return (
-    <div className="relative rounded-lg border border-gray-200 bg-white p-4 shadow-sm transition hover:shadow">
+    <div className="rise group relative" style={{ ["--i" as string]: index } as React.CSSProperties}>
       <button
         onClick={onRemove}
         disabled={removing}
         title="Remove from watchlist"
-        className="absolute right-2 top-2 z-10 text-lg leading-none text-gray-300 hover:text-red-500"
+        className="absolute right-3 top-3 z-10 font-mono text-xs text-dim opacity-0 transition hover:text-accent group-hover:opacity-100"
       >
-        ×
+        ✕
       </button>
-      <Link href={`/companies/${company.id}`} className="block">
+      <Link href={`/companies/${company.id}`} className="panel glow-hover block rounded-xl p-4">
         <div className="flex items-center gap-3">
           <Logo domain={company.domain} name={company.name} />
+          <div className="min-w-0 truncate font-medium text-ink">{company.name}</div>
+        </div>
+
+        <div className="mt-4 flex items-baseline justify-between font-mono">
           <div>
-            <div className="font-semibold">{company.name}</div>
-            <span
-              className={`inline-block rounded px-1.5 py-0.5 text-[10px] uppercase ${
-                priorityStyle[company.priority] ?? "bg-gray-100 text-gray-500"
-              }`}
-            >
-              {company.priority || "—"}
-            </span>
+            <span className="text-2xl font-medium text-ink">{company.open_postings}</span>{" "}
+            <span className="text-xs text-muted">roles</span>
           </div>
+          <div className="text-[11px] text-dim">last active {lastActive(company.timing)}</div>
         </div>
-        <div className="mt-3 flex gap-4 text-sm text-gray-600">
-          <span>
-            <b className="text-gray-900">{company.open_postings}</b> tracked
-          </span>
-          <span>
-            <b className="text-gray-900">{company.total_events}</b> events
-          </span>
-        </div>
+
         <div className="mt-3">
           <TimingBars timing={company.timing} compact />
         </div>

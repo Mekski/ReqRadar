@@ -12,87 +12,87 @@ companies:
   # --- Top priority: directly pollable via Greenhouse/Ashby ---
   - canonical_name: Roblox
     domain: roblox.com
-    priority: top
+    priority: S
     ats: { platform: greenhouse, slug: roblox }
     aliases: [roblox]
 
   - canonical_name: Anthropic
     domain: anthropic.com
-    priority: top
+    priority: S
     ats: { platform: greenhouse, slug: anthropic }
     aliases: [anthropic]
 
   - canonical_name: OpenAI
     domain: openai.com
-    priority: top
+    priority: S
     ats: { platform: ashby, slug: openai }
     aliases: [openai, open ai]
 
   - canonical_name: xAI
     domain: x.ai
-    priority: top
+    priority: S
     ats: { platform: greenhouse, slug: xai }
     aliases: [xai, x.ai, x ai]
 
   - canonical_name: Riot Games
     domain: riotgames.com
-    priority: top
+    priority: S
     ats: { platform: greenhouse, slug: riotgames }
     aliases: [riot games, riotgames, riot]
 
   - canonical_name: Epic Games
     domain: epicgames.com
-    priority: mid
+    priority: A
     ats: { platform: greenhouse, slug: epicgames }
     aliases: [epic games, epicgames]
 
   - canonical_name: Notion
     domain: notion.so
-    priority: mid
+    priority: A
     ats: { platform: ashby, slug: notion }
     aliases: [notion, notion labs, notion.com]
 
   # --- Proprietary careers sites: detected via the SimplifyJobs aggregator ---
   - canonical_name: Google
     domain: google.com
-    priority: mid
+    priority: A
     aliases: [google, google llc, alphabet, google deepmind, deepmind]
 
   - canonical_name: Apple
     domain: apple.com
-    priority: mid
+    priority: A
     aliases: [apple, apple inc]
 
   - canonical_name: Microsoft
     domain: microsoft.com
-    priority: mid
+    priority: A
     aliases: [microsoft, msft, microsoft corporation]
 
   - canonical_name: Meta
     domain: meta.com
-    priority: mid
+    priority: A
     aliases: [meta, meta platforms, facebook, fb]
 
   - canonical_name: NVIDIA
     domain: nvidia.com
-    priority: mid
+    priority: A
     aliases: [nvidia]
 
   - canonical_name: Electronic Arts
     domain: ea.com
-    priority: mid
+    priority: A
     aliases: [electronic arts, ea]
 
   - canonical_name: Amazon
     domain: amazon.com
-    priority: low
+    priority: C
     aliases: [amazon, amazon.com, aws, amazon web services]
 
   # Niantic's games division folded into Scopely (2025); careers redirect there.
   # Kept low-priority pending a decision to drop or repoint. See WATCHLIST.md.
   - canonical_name: Niantic
     domain: nianticlabs.com
-    priority: low
+    priority: C
     aliases: [niantic, niantic labs]
 
 # Non-ATS sources. Greenhouse/Ashby source rows are derived from the per-company

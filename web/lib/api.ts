@@ -11,7 +11,7 @@ export type Company = {
   priority: string;
   open_postings: number;
   total_events: number;
-  timing: TimingBucket[];
+  timing: TimingBucket[] | null; // Go marshals an empty slice as null
 };
 
 export type TimelineEvent = {
