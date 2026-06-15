@@ -4,6 +4,8 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 **Read DESIGN.md before making any architectural change.** It is the locked design; §10 (rejected alternatives) lists decisions that must not be silently re-introduced.
 
+**Working docs live in [`docs/`](docs/)** — point-in-time audits, tracked issues (with stable ids like H1/SEC-1), forward plans, and a changelog. Start at [`docs/README.md`](docs/README.md). Keep it updated as you work: log notable changes in `docs/changelog.md` and flip issue statuses when you fix them.
+
 ## Where things stand & where to pick up (2026-06-15)
 
 **Working end-to-end, CI green, on `main`:** the full collector → NATS → processor → Postgres pipeline (Milestone A); watchlist + firehose Telegram alerts and the REST API (Milestone B backend); and a Next.js dashboard. The dev DB holds ~3 years of backfilled timing for 13/15 companies and a primed firehose (~944 rows). Telegram works (bot @ReqRadarBot, 607ms detect-to-alert verified).
