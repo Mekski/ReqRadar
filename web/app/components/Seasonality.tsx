@@ -47,17 +47,25 @@ export function Seasonality({ season }: { season: SeasonBucket[] }) {
   const max = Math.max(...counts);
 
   return (
-    <div className="flex h-44 items-end gap-1.5">
-      {counts.map((c, i) => (
-        <div key={i} className="flex flex-1 flex-col items-center justify-end gap-2">
+    <div>
+      {/* bars are DIRECT children of a fixed-height row so % heights resolve */}
+      <div className="flex h-44 items-end gap-1.5">
+        {counts.map((c, i) => (
           <div
-            className={`w-full rounded-[2px] transition-[height] duration-500 ${i === peak ? "bg-accent" : "bg-accent/30"}`}
-            style={{ height: c === 0 ? "2px" : `${(c / max) * 100}%` }}
+            key={i}
+            className={`flex-1 rounded-t-[2px] transition-[height] duration-500 ${i === peak ? "bg-accent" : "bg-accent/30"}`}
+            style={{ height: c === 0 ? "2px" : `${Math.max(8, (c / max) * 100)}%` }}
             title={`${MON[i]} · ${c} ${c === 1 ? "posting" : "postings"}`}
           />
-          <span className={`font-mono text-[10px] ${i === peak ? "text-accent" : "text-dim"}`}>{MON[i][0]}</span>
-        </div>
-      ))}
+        ))}
+      </div>
+      <div className="mt-2 flex gap-1.5">
+        {MON.map((m, i) => (
+          <span key={i} className={`flex-1 text-center font-mono text-[10px] ${i === peak ? "text-accent" : "text-dim"}`}>
+            {m[0]}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

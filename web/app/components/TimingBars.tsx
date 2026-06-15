@@ -10,14 +10,12 @@ export function TimingBars({ timing, compact = false }: { timing: TimingBucket[]
   return (
     <div className={`flex items-end gap-[3px] ${compact ? "h-8" : "h-40"}`}>
       {timing.map((t) => (
-        <div key={t.month} className="flex flex-1 flex-col items-center justify-end gap-1.5">
-          <div
-            className="w-full rounded-[2px] bg-accent/80 transition-[height] duration-500"
-            style={{ height: `${Math.max(6, (t.count / max) * 100)}%` }}
-            title={`${t.month} · ${t.count} ${t.count === 1 ? "posting" : "postings"}`}
-          />
-          {!compact && <span className="font-mono text-[10px] text-dim">{t.month.slice(5)}</span>}
-        </div>
+        <div
+          key={t.month}
+          className="flex-1 rounded-t-[2px] bg-accent/80 transition-[height] duration-500"
+          style={{ height: `${Math.max(6, (t.count / max) * 100)}%` }}
+          title={`${t.month} · ${t.count} ${t.count === 1 ? "posting" : "postings"}`}
+        />
       ))}
     </div>
   );
