@@ -27,7 +27,23 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 5. **More collectors:** greenhouse/ashby/hn — factories wired; add `internal/collector/<name>` + one `r.Register` line. Slugs in WATCHLIST.md. (Greenhouse/Ashby pull WHOLE boards incl. full-time — filter to internships.)
 6. **Free deployment + CI deploy step** — Oracle Always Free / Fly.io (Mark won't pay; see memory `prefers-free-tooling`).
 
-**Later milestones (Mark deferred, do NOT build yet):** interview tips, JD-optimization tips, LinkedIn recruiter discovery (registry is person-aware for it, DESIGN §6).
+**Later milestones (Mark deferred, do NOT build yet):** LinkedIn recruiter discovery (registry is person-aware for it, DESIGN §6).
+
+## LLM roadmap (decided 2026-06-16) — FREE TIER ONLY (Gemini/Groq/Cerebras/Mistral; never paid)
+
+Note free-tier rate limits — prioritize, don't ship all at once. Expected-open does NOT use an LLM (curated seed; see item 1a).
+
+**Wanted (Mark's picks):**
+- **Sentiment summaries** — summarize HN/Reddit chatter per company. (Genuine LLM use; needs the HN/Reddit collectors first.)
+- **Fit score** — given a posting's JD + Mark's resume, score the match + flag missing keywords. High interest. NOTE: introduces a NEW input — Mark's resume (store its text; upload or a config file). Mark felt this **subsumes JD-diff summaries** (see rejected).
+- **Resume / JD optimization tips** — per target role, suggest resume tweaks to match the JD / pass ATS. (Pairs with fit score.)
+- **Interview-prep brief per company** — synthesize the interview process from public chatter; similar pipeline to sentiment.
+
+**Maybe:** **Category cleanup** — LLM normalizes the messy aggregator categories ("Software" vs "Software Engineering" vs "AI/ML") into clean tags; would directly sharpen the SWE seasonality filter. Mark unsure.
+
+**Rejected:** Weekly digest (Telegram already covers updates); Natural-language alerts (free-tier capacity); JD-diff summaries (Mark can read the JD; fit score covers the need).
+
+**Fuzzy entity disambiguation — my call: NOT needed yet (slightly unsure, flagged).** Deterministic resolution (exact/alias/domain) already handles the structured aggregator/ATS sources, where company names match seeded aliases (verified: 104 postings resolved correctly). The LLM step only earns its place once **messy free-text sources (HN/Reddit) exist**, where strings like "Riot" need context. So: revisit alongside the HN/Reddit sentiment work, not before. If resolution starts missing watchlist companies on structured data, reconsider sooner.
 
 **Alert recency gate (shipped 2026-06-15):** dispatcher only Telegram-alerts when a role's `date_posted` is < 48h old (`alertFreshness` in `internal/api/dispatcher.go`) — events still STORED, but adding a company / backfilling imports old roles silently (no flood). This is the job-watch "only new rows" behavior Mark wanted.
 
