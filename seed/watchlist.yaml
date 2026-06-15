@@ -70,7 +70,70 @@ companies:
     aliases: [notion, notion labs, notion.com]
     expected_estimate: rolling # Ashby, "apply as soon as possible," fills on a rolling basis
 
+  # Added 2026-06-15 (Mark's ranking). ATS boards verified live, so these get the
+  # rich pipeline + extracted pay; expected-open left to backfill (data-derived) /
+  # a later curated pass.
+  - canonical_name: Discord
+    domain: discord.com
+    priority: A
+    ats: { platform: greenhouse, slug: discord }
+    aliases: [discord]
+
+  - canonical_name: Stripe
+    domain: stripe.com
+    priority: A
+    ats: { platform: greenhouse, slug: stripe }
+    aliases: [stripe]
+
+  - canonical_name: Figma
+    domain: figma.com
+    priority: A
+    ats: { platform: greenhouse, slug: figma }
+    aliases: [figma]
+
+  - canonical_name: Coinbase
+    domain: coinbase.com
+    priority: B
+    ats: { platform: greenhouse, slug: coinbase }
+    aliases: [coinbase]
+
+  - canonical_name: Airbnb
+    domain: airbnb.com
+    priority: B
+    ats: { platform: greenhouse, slug: airbnb }
+    aliases: [airbnb]
+
+  - canonical_name: Pinterest
+    domain: pinterest.com
+    priority: B
+    ats: { platform: greenhouse, slug: pinterest }
+    aliases: [pinterest]
+
+  - canonical_name: Perplexity
+    domain: perplexity.ai
+    priority: A
+    ats: { platform: ashby, slug: perplexity }
+    aliases: [perplexity, perplexity ai]
+    expected_estimate: rolling # AI startup, rolling intern hiring (no documented season)
+
+  - canonical_name: Ramp
+    domain: ramp.com
+    priority: A
+    ats: { platform: ashby, slug: ramp }
+    aliases: [ramp]
+    expected_estimate: rolling # fintech startup, rolling intern hiring
+
   # --- Proprietary careers sites: detected via the SimplifyJobs aggregator ---
+  - canonical_name: Snap
+    domain: snap.com
+    priority: B
+    aliases: [snap, snapchat, snap inc]
+
+  - canonical_name: Spotify
+    domain: spotify.com
+    priority: A
+    aliases: [spotify]
+
   - canonical_name: Google
     domain: google.com
     priority: S

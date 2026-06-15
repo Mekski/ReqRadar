@@ -4,6 +4,9 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Watchlist — +10 companies (now 30)
+Added Discord/Stripe/Figma/Perplexity/Ramp (A), Coinbase/Airbnb/Pinterest/Snap (B), Spotify (A) per Mark's ranking. The 8 with live Greenhouse/Ashby boards carry ATS slugs → rich pipeline + extracted pay; Snap/Spotify are aggregator-detected (no ATS board). Verified live: new ATS orgs ingest correctly (Coinbase's "FP&A Analyst" matched via its "Internships & Emerging Talent" department — a real intern a title-only filter would miss), pay now shows on Notion ($57/hr) and Ramp ($11.7k/mo) cards, and **0 alerts fired** (48h freshness gate held — no flood from the bulk add). Expected-open for the new names is left to backfill (data-derived) or a later curated pass; the two rolling startups (Perplexity, Ramp) are seeded "rolling".
+
 ### Feature — Ashby collector (third source; first real card pay)
 Added `internal/collector/ashby` — one more `r.Register` line, polling the public Ashby posting-api board for openai/notion.
 - **Exact intern filter:** Ashby exposes a structured `employmentType`, so the filter is `employmentType == "Intern"` — no title/department heuristic, and OpenAI correctly yields 0 interns (its "intern" titles were all "Internal"/"International" false positives that Greenhouse's regex also had to guard against).
