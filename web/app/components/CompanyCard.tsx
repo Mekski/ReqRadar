@@ -6,6 +6,17 @@ import { useState } from "react";
 import { type Company, removeCompany, updateTier } from "@/lib/api";
 import { Logo } from "./Logo";
 
+// formatPay renders the company's SWE-intern posted pay, e.g. "$72/hr",
+// "$45–55/hr", or "$120–150k/yr". "—" when no SWE-intern pay is known yet.
+function formatPay(c: Company): string {
+  if (!c.pay_period) return "—";
+  const suffix = c.pay_period === "hourly" ? "/hr" : c.pay_period === "monthly" ? "/mo" : "/yr";
+  const fmt = (n: number) => (c.pay_period === "hourly" ? `${Math.round(n)}` : `${Math.round(n / 1000)}k`);
+  const lo = fmt(c.pay_min);
+  const hi = fmt(c.pay_max);
+  return lo === hi ? `$${lo}${suffix}` : `$${lo}–${hi}${suffix}`;
+}
+
 export function CompanyCard({ company, index = 0 }: { company: Company; index?: number }) {
   const router = useRouter();
   const [removing, setRemoving] = useState(false);
@@ -79,7 +90,7 @@ export function CompanyCard({ company, index = 0 }: { company: Company; index?: 
           </div>
           <div className="text-right">
             <div className="font-mono text-[10px] uppercase tracking-widest text-dim">pay</div>
-            <div className="font-mono text-lg font-medium text-muted">???</div>
+            <div className="font-mono text-lg font-medium text-muted">{formatPay(company)}</div>
           </div>
         </div>
       </Link>

@@ -163,15 +163,30 @@ type NewPosting struct {
 	IsSummer   bool
 	FirstSeen  time.Time
 	LastSeen   time.Time
+
+	// Posted pay (nil / "" when the JD carries none). Extracted by the processor.
+	PayMin      *float64
+	PayMax      *float64
+	PayPeriod   string
+	PayCurrency string
 }
 
 func (s *Store) InsertPosting(ctx context.Context, q DBTX, p NewPosting) (int64, error) {
 	var id int64
 	err := q.QueryRow(ctx,
-		`INSERT INTO postings (entity_id, source_id, external_id, title, url, locations, category, is_summer, first_seen, last_seen, status)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open') RETURNING id`,
-		p.EntityID, p.SourceID, p.ExternalID, p.Title, p.URL, p.Locations, p.Category, p.IsSummer, p.FirstSeen, p.LastSeen).Scan(&id)
+		`INSERT INTO postings (entity_id, source_id, external_id, title, url, locations, category, is_summer, first_seen, last_seen, status, pay_min, pay_max, pay_period, pay_currency)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open', $11, $12, $13, $14) RETURNING id`,
+		p.EntityID, p.SourceID, p.ExternalID, p.Title, p.URL, p.Locations, p.Category, p.IsSummer, p.FirstSeen, p.LastSeen,
+		p.PayMin, p.PayMax, nullStr(p.PayPeriod), nullStr(p.PayCurrency)).Scan(&id)
 	return id, err
+}
+
+// nullStr maps "" to a nil *string so an empty value is stored as SQL NULL.
+func nullStr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }
 
 func (s *Store) UpdatePosting(ctx context.Context, q DBTX, id int64, title, url string, locations []string, lastSeen time.Time) error {

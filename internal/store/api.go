@@ -199,6 +199,12 @@ type CompanySummary struct {
 	Timing       []TimingBucket `json:"timing"`            // last 12 months
 	ExpectedOpen string         `json:"expected_open"`     // data-derived SWE seasonality peak month, e.g. "Aug" ("" if too few samples)
 	ExpectedEst  string         `json:"expected_estimate"` // curated fallback month when data is sparse (the UI labels it "≈ est.")
+
+	// Posted pay of the company's most recent SWE-category internship (the card's
+	// pay figure). PayPeriod == "" means no SWE-intern pay is known yet.
+	PayMin    float64 `json:"pay_min"`
+	PayMax    float64 `json:"pay_max"`
+	PayPeriod string  `json:"pay_period"`
 }
 
 var monthAbbr = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
@@ -233,7 +239,48 @@ func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]Company
 	if err := s.attachExpected(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := s.attachPay(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// attachPay sets each company's card pay = the most recent SWE-category
+// internship posting that has an extracted pay range. "Standard SWE intern pay"
+// is what Mark wants surfaced; non-SWE intern roles (e.g. a PhD applied-scientist
+// req) carry pay but don't represent it, so they're excluded here.
+func (s *Store) attachPay(ctx context.Context, companies []CompanySummary) error {
+	if len(companies) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(companies))
+	idx := make(map[int64]*CompanySummary, len(companies))
+	for i := range companies {
+		ids[i] = companies[i].ID
+		idx[companies[i].ID] = &companies[i]
+	}
+	rows, err := s.Pool.Query(ctx,
+		`SELECT DISTINCT ON (entity_id) entity_id, pay_min, pay_max, pay_period
+		 FROM postings
+		 WHERE entity_id = ANY($1) AND pay_period IS NOT NULL
+		   AND category = ANY(ARRAY['Software','Software Engineering'])
+		 ORDER BY entity_id, first_seen DESC`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var entityID int64
+		var minV, maxV float64
+		var period string
+		if err := rows.Scan(&entityID, &minV, &maxV, &period); err != nil {
+			return err
+		}
+		if c := idx[entityID]; c != nil {
+			c.PayMin, c.PayMax, c.PayPeriod = minV, maxV, period
+		}
+	}
+	return rows.Err()
 }
 
 // attachExpected sets each company's expected-open month = the peak month-of-year

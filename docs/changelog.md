@@ -4,6 +4,14 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Feature — posted pay-range extraction (replaces the card "???")
+Greenhouse JDs carry pay in the `content` HTML (`pay_input_ranges` is unused by these orgs), so `internal/processor/pay.go` `extractPay` parses it.
+- **Conservative by design:** only extracts when a period keyword (hourly/annual/monthly) sits within ~40 chars of a `$` amount, on EITHER side (Greenhouse writes "Hourly Pay Range $72 — $72 USD" — keyword before), AND the value passes a per-period plausibility band. A test caught "$5 billion … annual revenue" extracting as "$5 annual"; the band (hourly $7–500, monthly $500–60k, annual $10k–2M) rejects it. Better to show nothing than wrong comp.
+- **Storage:** migration `000008` widens the existing `pay_min/pay_max` (INTEGER since 000003) to NUMERIC so hourly cents survive, and adds `pay_period`. Processor sets pay at posting insert (not on jd_changed — content is excluded from the hash, so pay-only edits don't fire one anyway).
+- **Card:** `attachPay` surfaces the company's most recent **SWE-category** intern pay (Mark's "standard SWE intern" call — a PhD applied-scientist req with pay is excluded); `CompanyCard` renders "$72/hr" / "$45–55/hr" / "$120–150k/yr", "—" when unknown.
+- **Verified live:** Roblox's PhD-intern req extracted `$72/hr` from the real JD. **Off-season caveat (logged, not hidden):** Greenhouse has no backfill and it's June, so there are ~0 open SWE interns → cards read "—" for pay until fall.
+- **Migration gotcha:** the first 000008 tried to re-ADD pay_min/max (they predate it) → atomic rollback left `schema_migrations` dirty at v8; reset to v7 + re-ran. The dev DB is shared with the test agent, so check `version,dirty` before migrating.
+
 ### Feature — Greenhouse collector (second source; proves the plugin framework)
 Added `internal/collector/greenhouse` — the second collector, dropped in via one `r.Register("greenhouse", greenhouse.New)` line (the framework's whole point). Polls the public Greenhouse board API for every org in the source config and emits one signal per **internship** req.
 - **Intern filter** (`isInternship`, word-boundary `\bintern(ship)?s?\b` on title OR department): live boards carry the company's whole req list — Anthropic's has 380 jobs, ~0 real interns. A naive substring match wrongly catches "**Intern**al Auditor" / "**Intern**ational"; the fixture pins all three cases. Filtering here is a volume guard (like simplify's active-only filter), not interpretation — the real normalization stays in the processor.

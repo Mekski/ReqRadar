@@ -121,6 +121,10 @@ func (p *Processor) persist(ctx context.Context, raw signal.RawSignal, sourceID,
 			break
 		}
 	}
+	var payMin, payMax *float64
+	if post.PayPeriod != "" {
+		payMin, payMax = &post.PayMin, &post.PayMax
+	}
 	var emit *signal.Event
 
 	switch {
@@ -133,6 +137,7 @@ func (p *Processor) persist(ctx context.Context, raw signal.RawSignal, sourceID,
 			Title: post.Title, URL: post.URL, Locations: post.Locations, Category: post.Category,
 			IsSummer:  isSummer,
 			FirstSeen: raw.ObservedAt, LastSeen: raw.ObservedAt,
+			PayMin: payMin, PayMax: payMax, PayPeriod: post.PayPeriod, PayCurrency: post.PayCurrency,
 		})
 		if err != nil {
 			return fmt.Errorf("insert posting: %w", err)

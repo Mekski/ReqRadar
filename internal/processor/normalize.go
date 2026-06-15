@@ -15,6 +15,13 @@ type Posting struct {
 	Locations []string `json:"locations"`
 	Terms     []string `json:"terms"`
 	Category  string   `json:"category"`
+
+	// Posted pay, extracted from JD text when present. PayPeriod == "" means no
+	// pay was found (or the source carries no JD text, e.g. SimplifyJobs).
+	PayMin      float64 `json:"pay_min"`
+	PayMax      float64 `json:"pay_max"`
+	PayPeriod   string  `json:"pay_period"`
+	PayCurrency string  `json:"pay_currency"`
 }
 
 // Normalizer parses a source-native payload into a Posting. Normalization is the
@@ -60,6 +67,7 @@ func normalizeGreenhouse(payload []byte) (Posting, error) {
 		URL         string   `json:"url"`
 		Locations   []string `json:"locations"`
 		Departments []string `json:"departments"`
+		Content     string   `json:"content"`
 	}
 	if err := json.Unmarshal(payload, &e); err != nil {
 		return Posting{}, err
@@ -68,14 +76,18 @@ func normalizeGreenhouse(payload []byte) (Posting, error) {
 	if company == "" {
 		company = e.Org
 	}
-	return Posting{
+	p := Posting{
 		Company:   company,
 		Title:     e.Title,
 		URL:       e.URL,
 		Locations: e.Locations,
 		Terms:     termsFromTitle(e.Title),
 		Category:  greenhouseCategory(e.Title, e.Departments),
-	}, nil
+	}
+	if pay, ok := extractPay(e.Content); ok {
+		p.PayMin, p.PayMax, p.PayPeriod, p.PayCurrency = pay.Min, pay.Max, pay.Period, pay.Currency
+	}
+	return p, nil
 }
 
 var seasonRE = regexp.MustCompile(`(?i)\b(Summer|Fall|Winter|Spring)\b(?:\s+(\d{4}))?`)

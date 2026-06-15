@@ -15,6 +15,9 @@ export type Company = {
   timing: TimingBucket[] | null; // Go marshals an empty slice as null
   expected_open: string; // data-derived SWE peak month, e.g. "Aug" ("" if too few samples)
   expected_estimate: string; // curated fallback month when data is sparse ("" if none)
+  pay_min: number; // posted pay of the latest SWE-category intern (0 when unknown)
+  pay_max: number;
+  pay_period: string; // "hourly" | "annual" | "monthly"; "" when no SWE-intern pay known
 };
 
 export type TimelineEvent = {
