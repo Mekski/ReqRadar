@@ -17,7 +17,7 @@ DESIGN §3.3 and CLAUDE.md claim "the API checks a static bearer token" and "Cad
 **Status:** fixed (2026-06-15)
 `SendMessage` now checks `resp.StatusCode`, surfaces it in the error, falls back to the HTTP status text when the body isn't JSON (the prior code produced an empty `"failed: "` on a 5xx), and surfaces `parameters.retry_after` on a 429. Verified by `internal/telegram/telegram_test.go` (success/request-shape, ok:false, 429+retry_after, non-JSON 5xx).
 
-> Related, still **open** — the dispatcher *swallows* send errors (logs + continues; `dispatcher.go` `handleWatchlist`/`handleFirehose`), so a Telegram outage still drops the alert rather than Nak-ing for redelivery. Now that the events consumer has `MaxDeliver`/`BackOff` (H3), returning the error could make failed sends retry — but that has multi-recipient duplicate implications, so it's left as a deliberate follow-up, not changed in this pass.
+> Related — **fixed (2026-06-15).** The dispatcher previously *swallowed* send errors (logged + continued, then Ack'd), so a Telegram outage dropped the very alert the upstream transactional outbox works to preserve — the weak last hop a separate over-engineering audit rightly flagged as partly negating H1/H2. `handleWatchlist`/`handleFirehose` now return the send error, so the events consumer Nak's and redelivers it under the `MaxDeliver(5)`/`BackOff([30s,2m,5m])` caps from H3 (after which it's terminated + logged, not hot-looped). Single-user note: with one recipient per event a redelivery just retries the failed send; multi-user would re-notify already-sent recipients (bounded, acceptable) until alerts-table dedup is added.
 
 ### OBS-2 — `detect_to_alert_ms` clamps negatives to 0 silently
 **Status:** open · cosmetic

@@ -49,6 +49,15 @@ func withinFreshness(eventTime, now time.Time) bool {
 	return now.Sub(eventTime) <= alertFreshness
 }
 
+// A send failure returns an error so the events consumer Nak's the message and
+// redelivers it (with the MaxDeliver/BackOff caps from internal/bus). Previously
+// these swallowed send errors and Ack'd anyway, dropping the very alert the
+// upstream transactional outbox works to preserve — the weak last hop. A retried
+// alert simply records a larger detect_to_alert_ms (honest). Single-user note:
+// with one recipient per event, a redelivery just retries the failed send; in a
+// future multi-user setup a redelivery would re-notify already-sent recipients
+// (bounded, acceptable) — dedup on the alerts table if that ever matters.
+
 // handleFirehose sends a lightweight "new internship" alert to every user.
 func (d *Dispatcher) handleFirehose(ctx context.Context, e signal.Event) error {
 	chatIDs, err := d.store.AllUserChatIDs(ctx)
@@ -56,10 +65,15 @@ func (d *Dispatcher) handleFirehose(ctx context.Context, e signal.Event) error {
 		return fmt.Errorf("chat ids: %w", err)
 	}
 	text := formatFirehose(e)
+	var sendErr error
 	for _, chatID := range chatIDs {
 		if err := d.tg.SendMessage(ctx, chatID, text); err != nil {
 			d.log.Error("firehose send", "err", err)
+			sendErr = err
 		}
+	}
+	if sendErr != nil {
+		return sendErr // redeliver rather than drop the alert
 	}
 	d.log.Info("firehose alert sent", "recipients", len(chatIDs))
 	return nil
@@ -71,12 +85,14 @@ func (d *Dispatcher) handleWatchlist(ctx context.Context, e signal.Event) error 
 		return fmt.Errorf("watchers: %w", err)
 	}
 	text := formatAlert(e)
+	var sendErr error
 	for _, w := range watchers {
 		if !shouldAlert(e.Type, w.AlertConfig) {
 			continue
 		}
 		if err := d.tg.SendMessage(ctx, w.ChatID, text); err != nil {
 			d.log.Error("telegram send", "user", w.UserID, "err", err)
+			sendErr = err // surface so the event is redelivered, not dropped
 			continue
 		}
 		ms := int(time.Since(e.ObservedAt).Milliseconds())
@@ -88,7 +104,7 @@ func (d *Dispatcher) handleWatchlist(ctx context.Context, e signal.Event) error 
 		}
 		d.log.Info("alert sent", "entity", e.EntityID, "type", e.Type, "detect_to_alert_ms", ms)
 	}
-	return nil
+	return sendErr
 }
 
 var defaultAlertTypes = map[string]bool{"posting_opened": true, "jd_changed": true}
