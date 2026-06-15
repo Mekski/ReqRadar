@@ -251,20 +251,40 @@ func (s *Store) attachExpected(ctx context.Context, companies []CompanySummary) 
 		return err
 	}
 	defer rows.Close()
-	peakCount := map[int64]int{}
+
+	type acc struct{ peakMonth, peakCount, total int }
+	stats := map[int64]*acc{}
 	for rows.Next() {
 		var entityID, month, count int64
 		if err := rows.Scan(&entityID, &month, &count); err != nil {
 			return err
 		}
-		if int(count) > peakCount[entityID] {
-			peakCount[entityID] = int(count)
-			if c := idx[entityID]; c != nil && month >= 1 && month <= 12 {
-				c.ExpectedOpen = monthAbbr[month-1]
+		a := stats[entityID]
+		if a == nil {
+			a = &acc{}
+			stats[entityID] = a
+		}
+		a.total += int(count)
+		if int(count) > a.peakCount && month >= 1 && month <= 12 {
+			a.peakCount = int(count)
+			a.peakMonth = int(month)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	// Only trust the data-derived month with enough summer-SWE history; sparse
+	// companies (1–2 postings = noise) are left blank for the LLM-estimate fallback.
+	const minSamples = 5
+	for id, a := range stats {
+		if a.total >= minSamples && a.peakMonth >= 1 {
+			if c := idx[id]; c != nil {
+				c.ExpectedOpen = monthAbbr[a.peakMonth-1]
 			}
 		}
 	}
-	return rows.Err()
+	return nil
 }
 
 // attachTiming fills each company's last-12-months posting_opened histogram in
