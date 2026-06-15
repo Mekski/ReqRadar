@@ -59,12 +59,27 @@ func (s *Server) timing(w http.ResponseWriter, r *http.Request) {
 	s.respond(w, data, err)
 }
 
+// categoryGroups maps a filter key to the messy aggregator category labels.
+var categoryGroups = map[string][]string{
+	"swe": {"Software", "Software Engineering"},
+	"ml":  {"AI/ML/Data", "Data Science, AI & Machine Learning"},
+	"all": nil, // no filter
+}
+
 func (s *Server) seasonality(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r)
 	if !ok {
 		return
 	}
-	data, err := s.store.CompanySeasonality(r.Context(), id)
+	cat := r.URL.Query().Get("category")
+	if cat == "" {
+		cat = "swe" // default to SWE-intern roles
+	}
+	cats, known := categoryGroups[cat]
+	if !known {
+		cats = categoryGroups["swe"]
+	}
+	data, err := s.store.CompanySeasonality(r.Context(), id, cats)
 	s.respond(w, data, err)
 }
 

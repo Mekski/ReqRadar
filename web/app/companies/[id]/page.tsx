@@ -7,11 +7,29 @@ function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default async function CompanyPage({ params }: { params: Promise<{ id: string }> }) {
+const FILTERS = [
+  { key: "swe", label: "SWE" },
+  { key: "ml", label: "AI / ML" },
+  { key: "all", label: "all roles" },
+];
+
+export default async function CompanyPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ cat?: string }>;
+}) {
   const { id } = await params;
+  const { cat } = await searchParams;
+  const filter = cat ?? "swe";
   const cid = Number(id);
 
-  const [companies, timeline, season] = await Promise.all([getCompanies(), getTimeline(cid), getSeasonality(cid)]);
+  const [companies, timeline, season] = await Promise.all([
+    getCompanies(),
+    getTimeline(cid),
+    getSeasonality(cid, filter),
+  ]);
   const company = companies.find((c) => c.id === cid);
   if (!company) {
     return <p className="font-mono text-sm text-dim">// company not found</p>;
@@ -39,12 +57,27 @@ export default async function CompanyPage({ params }: { params: Promise<{ id: st
 
       {/* Hero: the flagship answer — when does this company open roles? */}
       <section className="panel rounded-xl p-6">
-        <SectionLabel>expected to open</SectionLabel>
+        <div className="flex items-start justify-between gap-3">
+          <SectionLabel>expected to open</SectionLabel>
+          <div className="flex gap-1 font-mono text-[11px]">
+            {FILTERS.map((f) => (
+              <Link
+                key={f.key}
+                href={`/companies/${cid}?cat=${f.key}`}
+                className={`rounded px-2 py-0.5 transition-colors ${
+                  f.key === filter ? "bg-accent/15 text-accent" : "text-dim hover:text-muted"
+                }`}
+              >
+                {f.label}
+              </Link>
+            ))}
+          </div>
+        </div>
         <p className="mt-3 font-mono text-3xl font-bold text-accent">{window ?? "—"}</p>
         <p className="mb-6 mt-1 font-mono text-[11px] text-dim">
           {window
-            ? `based on ${company.name}'s posting history (each bar = a calendar month, all years combined)`
-            : "needs historical data"}
+            ? `${FILTERS.find((f) => f.key === filter)?.label} roles · each bar = a calendar month, all years combined`
+            : "no history for this role type yet — try “all roles”, or run a backfill"}
         </p>
         <Seasonality season={season} />
       </section>

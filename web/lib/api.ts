@@ -13,6 +13,7 @@ export type Company = {
   open_postings: number;
   total_events: number;
   timing: TimingBucket[] | null; // Go marshals an empty slice as null
+  expected_open: string; // SWE peak month, e.g. "Aug" ("" if unknown)
 };
 
 export type TimelineEvent = {
@@ -49,7 +50,8 @@ const arr = <T>(p: Promise<T[] | null>) => p.then((x) => x ?? []);
 
 export const getCompanies = () => arr(get<Company[] | null>("/api/companies"));
 export const getTimeline = (id: number) => arr(get<TimelineEvent[] | null>(`/api/companies/${id}/timeline`));
-export const getSeasonality = (id: number) => arr(get<SeasonBucket[] | null>(`/api/companies/${id}/seasonality`));
+export const getSeasonality = (id: number, category = "swe") =>
+  arr(get<SeasonBucket[] | null>(`/api/companies/${id}/seasonality?category=${category}`));
 export const getPostings = () => arr(get<OpenPosting[] | null>("/api/postings"));
 export const getFirehose = () => arr(get<FirehosePosting[] | null>("/api/firehose"));
 

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -113,6 +114,13 @@ func (p *Processor) persist(ctx context.Context, raw signal.RawSignal, sourceID,
 	}
 
 	parsed, _ := json.Marshal(post)
+	isSummer := false
+	for _, t := range post.Terms {
+		if strings.HasPrefix(t, "Summer") {
+			isSummer = true
+			break
+		}
+	}
 	var emit *signal.Event
 
 	switch {
@@ -122,7 +130,8 @@ func (p *Processor) persist(ctx context.Context, raw signal.RawSignal, sourceID,
 		}
 		pid, err := p.store.InsertPosting(ctx, tx, store.NewPosting{
 			EntityID: entityID, SourceID: sourceID, ExternalID: raw.ExternalID,
-			Title: post.Title, URL: post.URL, Locations: post.Locations,
+			Title: post.Title, URL: post.URL, Locations: post.Locations, Category: post.Category,
+			IsSummer:  isSummer,
 			FirstSeen: raw.ObservedAt, LastSeen: raw.ObservedAt,
 		})
 		if err != nil {

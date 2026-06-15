@@ -5,20 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { type Company, removeCompany, updateTier } from "@/lib/api";
 import { Logo } from "./Logo";
-import { TimingBars } from "./TimingBars";
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function lastActive(timing: Company["timing"]): string {
-  if (!timing || timing.length === 0) return "—";
-  for (let i = timing.length - 1; i >= 0; i--) {
-    if (timing[i].count > 0) {
-      const [y, m] = timing[i].month.split("-");
-      return `${MONTHS[Number(m) - 1]} '${y.slice(2)}`;
-    }
-  }
-  return "—";
-}
 
 export function CompanyCard({ company, index = 0 }: { company: Company; index?: number }) {
   const router = useRouter();
@@ -37,8 +23,7 @@ export function CompanyCard({ company, index = 0 }: { company: Company; index?: 
   }
 
   async function onTier(e: React.ChangeEvent<HTMLSelectElement>) {
-    const tier = e.target.value;
-    await updateTier(company.id, tier);
+    await updateTier(company.id, e.target.value);
     router.refresh();
   }
 
@@ -69,22 +54,22 @@ export function CompanyCard({ company, index = 0 }: { company: Company; index?: 
           ✕
         </button>
       </div>
+
       <Link href={`/companies/${company.id}`} className="panel glow-hover block rounded-xl p-4">
         <div className="flex items-center gap-3 pr-14">
           <Logo domain={company.domain} name={company.name} />
           <div className="min-w-0 truncate font-medium text-ink">{company.name}</div>
         </div>
 
-        <div className="mt-4 flex items-baseline justify-between font-mono">
+        <div className="mt-4 flex items-end justify-between">
           <div>
-            <span className="text-2xl font-medium text-ink">{company.open_postings}</span>{" "}
-            <span className="text-xs text-muted">roles</span>
+            <div className="font-mono text-[10px] uppercase tracking-widest text-dim">expected</div>
+            <div className="font-mono text-lg font-medium text-accent">{company.expected_open || "—"}</div>
           </div>
-          <div className="text-[11px] text-dim">last active {lastActive(company.timing)}</div>
-        </div>
-
-        <div className="mt-3">
-          <TimingBars timing={company.timing} compact />
+          <div className="text-right">
+            <div className="font-mono text-[10px] uppercase tracking-widest text-dim">pay</div>
+            <div className="font-mono text-lg font-medium text-muted">???</div>
+          </div>
         </div>
       </Link>
     </div>

@@ -191,8 +191,11 @@ type CompanySummary struct {
 	Priority     string         `json:"priority"`
 	OpenPostings int            `json:"open_postings"`
 	TotalEvents  int            `json:"total_events"`
-	Timing       []TimingBucket `json:"timing"` // last 12 months, for the card sparkline
+	Timing       []TimingBucket `json:"timing"`        // last 12 months
+	ExpectedOpen string         `json:"expected_open"` // SWE seasonality peak month, e.g. "Aug"
 }
+
+var monthAbbr = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
 
 func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]CompanySummary, error) {
 	rows, err := s.Pool.Query(ctx,
@@ -220,7 +223,48 @@ func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]Company
 	if err := s.attachTiming(ctx, out); err != nil {
 		return nil, err
 	}
+	if err := s.attachExpected(ctx, out); err != nil {
+		return nil, err
+	}
 	return out, nil
+}
+
+// attachExpected sets each company's expected-open month = the peak month-of-year
+// of its SWE-category posting_opened events (one grouped query).
+func (s *Store) attachExpected(ctx context.Context, companies []CompanySummary) error {
+	if len(companies) == 0 {
+		return nil
+	}
+	ids := make([]int64, len(companies))
+	idx := make(map[int64]*CompanySummary, len(companies))
+	for i := range companies {
+		ids[i] = companies[i].ID
+		idx[companies[i].ID] = &companies[i]
+	}
+	rows, err := s.Pool.Query(ctx,
+		`SELECT e.entity_id, EXTRACT(MONTH FROM e.event_time)::int AS m, count(*)
+		 FROM events e JOIN postings p ON p.id = e.posting_id
+		 WHERE e.type = 'posting_opened' AND e.entity_id = ANY($1) AND p.is_summer
+		   AND p.category = ANY(ARRAY['Software','Software Engineering'])
+		 GROUP BY e.entity_id, m`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	peakCount := map[int64]int{}
+	for rows.Next() {
+		var entityID, month, count int64
+		if err := rows.Scan(&entityID, &month, &count); err != nil {
+			return err
+		}
+		if int(count) > peakCount[entityID] {
+			peakCount[entityID] = int(count)
+			if c := idx[entityID]; c != nil && month >= 1 && month <= 12 {
+				c.ExpectedOpen = monthAbbr[month-1]
+			}
+		}
+	}
+	return rows.Err()
 }
 
 // attachTiming fills each company's last-12-months posting_opened histogram in
@@ -297,12 +341,16 @@ type SeasonBucket struct {
 
 // CompanySeasonality aggregates posting_opened events by month-of-year across ALL
 // years — the seasonal pattern that answers "when does this company open roles?"
-// (distinct from CompanyTiming's recent month-by-month timeline).
-func (s *Store) CompanySeasonality(ctx context.Context, entityID int64) ([]SeasonBucket, error) {
+// If categories is non-empty, it restricts to postings in those categories
+// (joining events → postings), so the chart can show SWE-intern roles only.
+func (s *Store) CompanySeasonality(ctx context.Context, entityID int64, categories []string) ([]SeasonBucket, error) {
 	rows, err := s.Pool.Query(ctx,
-		`SELECT EXTRACT(MONTH FROM event_time)::int AS m, count(*)
-		 FROM events WHERE entity_id = $1 AND type = 'posting_opened'
-		 GROUP BY m ORDER BY m`, entityID)
+		`SELECT EXTRACT(MONTH FROM e.event_time)::int AS m, count(*)
+		 FROM events e
+		 JOIN postings p ON p.id = e.posting_id
+		 WHERE e.entity_id = $1 AND e.type = 'posting_opened' AND p.is_summer
+		   AND ($2::text[] IS NULL OR p.category = ANY($2))
+		 GROUP BY m ORDER BY m`, entityID, categories)
 	if err != nil {
 		return nil, err
 	}

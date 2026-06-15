@@ -159,6 +159,8 @@ type NewPosting struct {
 	Title      string
 	URL        string
 	Locations  []string
+	Category   string
+	IsSummer   bool
 	FirstSeen  time.Time
 	LastSeen   time.Time
 }
@@ -166,9 +168,9 @@ type NewPosting struct {
 func (s *Store) InsertPosting(ctx context.Context, q DBTX, p NewPosting) (int64, error) {
 	var id int64
 	err := q.QueryRow(ctx,
-		`INSERT INTO postings (entity_id, source_id, external_id, title, url, locations, first_seen, last_seen, status)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'open') RETURNING id`,
-		p.EntityID, p.SourceID, p.ExternalID, p.Title, p.URL, p.Locations, p.FirstSeen, p.LastSeen).Scan(&id)
+		`INSERT INTO postings (entity_id, source_id, external_id, title, url, locations, category, is_summer, first_seen, last_seen, status)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open') RETURNING id`,
+		p.EntityID, p.SourceID, p.ExternalID, p.Title, p.URL, p.Locations, p.Category, p.IsSummer, p.FirstSeen, p.LastSeen).Scan(&id)
 	return id, err
 }
 
