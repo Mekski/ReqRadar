@@ -5,6 +5,7 @@ package main
 import (
 	"github.com/Mekski/reqradar/internal/bus"
 	"github.com/Mekski/reqradar/internal/collector"
+	"github.com/Mekski/reqradar/internal/collector/greenhouse"
 	"github.com/Mekski/reqradar/internal/collector/simplify"
 	"github.com/Mekski/reqradar/internal/service"
 	"github.com/Mekski/reqradar/internal/store"
@@ -36,6 +37,7 @@ func main() {
 	// Register collector factories. Adding a source = one line here + a sources
 	// row; the DB's enabled flag decides whether it actually runs.
 	r.Register("simplify-listings", simplify.New)
+	r.Register("greenhouse", greenhouse.New)
 
 	if err := r.Run(ctx); err != nil {
 		log.Error("runner stopped", "err", err)

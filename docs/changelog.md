@@ -4,6 +4,15 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Feature — Greenhouse collector (second source; proves the plugin framework)
+Added `internal/collector/greenhouse` — the second collector, dropped in via one `r.Register("greenhouse", greenhouse.New)` line (the framework's whole point). Polls the public Greenhouse board API for every org in the source config and emits one signal per **internship** req.
+- **Intern filter** (`isInternship`, word-boundary `\bintern(ship)?s?\b` on title OR department): live boards carry the company's whole req list — Anthropic's has 380 jobs, ~0 real interns. A naive substring match wrongly catches "**Intern**al Auditor" / "**Intern**ational"; the fixture pins all three cases. Filtering here is a volume guard (like simplify's active-only filter), not interpretation — the real normalization stays in the processor.
+- **Processor:** `normalizeGreenhouse` derives terms (season-from-title, so `is_summer` works like SimplifyJobs) and a coarse category (`Software Engineering` / `AI/ML/Data`), and resolves company via `company_name` → org-slug-alias fallback. Registered in the normalizers map.
+- **Robustness:** per-org conditional GET (ETag), per-org error isolation (one org's 500 doesn't drop the others' signals — only an all-orgs failure errors the run), `first_published` → EventTime, content/updated_at excluded from the content hash (Greenhouse rewrites body markup → would cause phantom jd_changed alerts).
+- **No Backfiller:** the API only exposes open reqs, so Greenhouse contributes live detection + pay, not history.
+- **Verified live:** 2 intern postings resolved to watchlist (Roblox, Epic), 0 full-time leaked, 0 alerts (old `first_published` → 48h freshness gate). Tests: golden parse, the word-boundary filter table, hash-volatility, toSignal, conditional-GET, partial/all-org failure; plus `normalizeGreenhouse`/`termsFromTitle`/`greenhouseCategory`.
+- **Next:** pay-range extraction from the JD `content` HTML (`pay_input_ranges` is unused by these orgs), then the `ashby` collector.
+
 ### Alert-path hardening + tests (OBS-1)
 The dispatcher and Telegram client — the product's payoff — were untested. Added focused coverage of their pure logic and fixed the Telegram error handling:
 - **OBS-1 fix** (`internal/telegram/telegram.go`): `SendMessage` now checks `resp.StatusCode`, surfaces it (with HTTP status-text fallback for non-JSON 5xx bodies), and reports `parameters.retry_after` on a 429 — previously a 429/5xx produced an empty `"failed: "` error.
