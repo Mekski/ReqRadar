@@ -34,13 +34,19 @@ func NewDispatcher(st *store.Store, tg *telegram.Client, log *slog.Logger) *Disp
 const alertFreshness = 48 * time.Hour
 
 func (d *Dispatcher) Handle(ctx context.Context, e signal.Event) error {
-	if time.Since(e.EventTime) > alertFreshness {
+	if !withinFreshness(e.EventTime, time.Now()) {
 		return nil // role wasn't posted recently — stored, but not alert-worthy
 	}
 	if e.Type == "firehose" {
 		return d.handleFirehose(ctx, e)
 	}
 	return d.handleWatchlist(ctx, e)
+}
+
+// withinFreshness reports whether an event is recent enough to alert on. Split
+// out (with an explicit now) so the 48h boundary is unit-testable without a clock.
+func withinFreshness(eventTime, now time.Time) bool {
+	return now.Sub(eventTime) <= alertFreshness
 }
 
 // handleFirehose sends a lightweight "new internship" alert to every user.

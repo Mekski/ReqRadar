@@ -42,13 +42,28 @@ func (c *Client) SendMessage(ctx context.Context, chatID, text string) error {
 	}
 	defer resp.Body.Close()
 
+	// Decode best-effort: a 5xx can carry a non-JSON body, in which case the HTTP
+	// status below is what makes the error useful. On 429 Telegram returns
+	// parameters.retry_after — surface it so a caller (or logs) can see the
+	// backoff Telegram is asking for.
 	var body struct {
 		OK          bool   `json:"ok"`
 		Description string `json:"description"`
+		Parameters  struct {
+			RetryAfter int `json:"retry_after"`
+		} `json:"parameters"`
 	}
 	_ = json.NewDecoder(resp.Body).Decode(&body)
-	if !body.OK {
-		return fmt.Errorf("telegram sendMessage failed: %s", body.Description)
+
+	if resp.StatusCode != http.StatusOK || !body.OK {
+		desc := body.Description
+		if desc == "" {
+			desc = resp.Status // e.g. "502 Bad Gateway" when the body wasn't JSON
+		}
+		if body.Parameters.RetryAfter > 0 {
+			return fmt.Errorf("telegram sendMessage failed (HTTP %d): %s (retry_after %ds)", resp.StatusCode, desc, body.Parameters.RetryAfter)
+		}
+		return fmt.Errorf("telegram sendMessage failed (HTTP %d): %s", resp.StatusCode, desc)
 	}
 	return nil
 }

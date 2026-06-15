@@ -14,8 +14,10 @@ DESIGN §3.3 and CLAUDE.md claim "the API checks a static bearer token" and "Cad
 ## Correctness / robustness (low severity)
 
 ### OBS-1 — Telegram client ignores HTTP status and `retry_after`
-**Status:** open
-[internal/telegram/telegram.go](../../internal/telegram/telegram.go) decodes the JSON body but does not check `resp.StatusCode`, so a 429 (rate limit) or 5xx with a non-JSON body yields an empty error and no `retry_after` handling. Fix: check status, surface it, honor `parameters.retry_after`.
+**Status:** fixed (2026-06-15)
+`SendMessage` now checks `resp.StatusCode`, surfaces it in the error, falls back to the HTTP status text when the body isn't JSON (the prior code produced an empty `"failed: "` on a 5xx), and surfaces `parameters.retry_after` on a 429. Verified by `internal/telegram/telegram_test.go` (success/request-shape, ok:false, 429+retry_after, non-JSON 5xx).
+
+> Related, still **open** — the dispatcher *swallows* send errors (logs + continues; `dispatcher.go` `handleWatchlist`/`handleFirehose`), so a Telegram outage still drops the alert rather than Nak-ing for redelivery. Now that the events consumer has `MaxDeliver`/`BackOff` (H3), returning the error could make failed sends retry — but that has multi-recipient duplicate implications, so it's left as a deliberate follow-up, not changed in this pass.
 
 ### OBS-2 — `detect_to_alert_ms` clamps negatives to 0 silently
 **Status:** open · cosmetic

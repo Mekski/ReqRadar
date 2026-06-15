@@ -4,6 +4,13 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Alert-path hardening + tests (OBS-1)
+The dispatcher and Telegram client — the product's payoff — were untested. Added focused coverage of their pure logic and fixed the Telegram error handling:
+- **OBS-1 fix** (`internal/telegram/telegram.go`): `SendMessage` now checks `resp.StatusCode`, surfaces it (with HTTP status-text fallback for non-JSON 5xx bodies), and reports `parameters.retry_after` on a 429 — previously a 429/5xx produced an empty `"failed: "` error.
+- **Tests:** `internal/telegram/telegram_test.go` (success + request shape, ok:false, 429+retry_after, non-JSON 5xx via an httptest server) and `internal/api/dispatcher_test.go` (`withinFreshness` 48h boundary, `shouldAlert` default/custom/empty/malformed config, `formatAlert` posting_opened vs jd_changed ± location/url, `formatFirehose`).
+- Extracted the 48h freshness gate into `withinFreshness(eventTime, now)` so the boundary is testable without a clock.
+- **Left as deliberate follow-up** (noted in [issues/audit-findings.md](issues/audit-findings.md)): the dispatcher swallows send errors instead of Nak-ing for redelivery — fixing it has multi-recipient duplicate implications.
+
 ### Feature — "expected open" curated-seed fallback + seed-drift reconciliation + dead-LLM cleanup
 Shipped the sparse-company fallback for the dashboard's flagship "expected open" month (CLAUDE.md item 1a). The confidence gate (`attachExpected`, `minSamples=5`) leaves 11/20 companies without a data-derived month; those now show a **curated estimate** instead of "—".
 - **Plumbing:** `expected_estimate` flows YAML → `cmd/seed` → `store.UpsertCompany` (into `entities.metadata`) → `CompanySummary` on `/api/companies` → `CompanyCard.tsx`. UI priority: data-month → estimate ("≈ est.") → "rolling" → "—".
