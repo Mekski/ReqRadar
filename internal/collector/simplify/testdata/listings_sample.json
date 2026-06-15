@@ -1,0 +1,72 @@
+[
+  {
+    "date_updated": 1761004443,
+    "sponsorship": "Does Not Offer Sponsorship",
+    "active": true,
+    "degrees": [
+      "Bachelor's"
+    ],
+    "url": "https://www.pega.com/about/careers/22692/software-engineer-summer-intern-software-delivery-excellence-alliance",
+    "company_name": "Pega",
+    "title": "Software Engineer Summer Intern, Software Delivery Excellence Alliance",
+    "locations": [
+      "Waltham, MA"
+    ],
+    "terms": [
+      "Summer 2026"
+    ],
+    "category": "Software Engineering",
+    "source": "angie-hue",
+    "id": "79b20a13-a49b-496a-8569-ddd93c0c7b84",
+    "date_posted": 1761004443,
+    "company_url": "",
+    "is_visible": true
+  },
+  {
+    "source": "Simplify",
+    "category": "AI/ML/Data",
+    "company_name": "Tencent",
+    "id": "2154dbb1-0a02-4ce3-8bc5-6fbe782e9d84",
+    "title": "Research Internship - Reinforcement Learning for Large Foundation Models",
+    "active": true,
+    "terms": [
+      "Winter 2026",
+      "Spring 2026",
+      "Summer 2026",
+      "Fall 2026"
+    ],
+    "date_updated": 1761824262,
+    "date_posted": 1761824262,
+    "url": "https://tencent.wd1.myworkdayjobs.com/Tencent_Careers/job/US-Washington-Bellevue/Research-Internship---Reinforcement-Learning-for-Large-Foundation-Models_R106337-1",
+    "locations": [
+      "Bellevue, WA"
+    ],
+    "company_url": "https://simplify.jobs/c/Tencent",
+    "is_visible": true,
+    "sponsorship": "Other",
+    "degrees": []
+  },
+  {
+    "source": "Simplify",
+    "category": "AI/ML/Data",
+    "company_name": "Autodesk",
+    "id": "7142bcf1-4e34-4e69-820e-4649670f700c",
+    "title": "PhD Intern - Research - Embodied AI Agents",
+    "active": false,
+    "terms": [
+      "Summer 2026"
+    ],
+    "date_updated": 1760783536,
+    "date_posted": 1760783536,
+    "url": "https://autodesk.wd1.myworkdayjobs.com/en-US/uni/job/Toronto-ON-CAN/PhD-Intern--Research---Embodied-AI-Agents_25WD92247",
+    "locations": [
+      "Toronto, ON, Canada"
+    ],
+    "company_url": "https://simplify.jobs/c/Autodesk",
+    "is_visible": true,
+    "sponsorship": "Other",
+    "degrees": [
+      "PhD"
+    ]
+  }
+]
