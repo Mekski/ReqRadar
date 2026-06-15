@@ -1,4 +1,4 @@
-.PHONY: dev-up dev-down migrate migrate-down build test fmt vet check
+.PHONY: dev-up dev-down nats-reset migrate migrate-down build test test-integration fmt vet check
 
 # Bring the local dev stack up/down (postgres, nats, prometheus, grafana).
 dev-up:
@@ -6,6 +6,14 @@ dev-up:
 
 dev-down:
 	docker compose -f deploy/docker-compose.yml down
+
+# Recreate NATS, wiping its streams + durable consumers. Needed after changing
+# consumer config (e.g. the redelivery policy in internal/bus): js.Subscribe
+# binds to — does not update — an existing durable, so the processor/api would
+# otherwise fail to start with a config mismatch. NATS has no mounted volume, so
+# this is a clean reset; EnsureStreams reprovisions and the collector re-emits.
+nats-reset:
+	docker compose -f deploy/docker-compose.yml up -d --force-recreate nats
 
 # Apply / roll back migrations against the dev DB (uses config defaults).
 migrate:
@@ -47,6 +55,11 @@ build:
 
 test:
 	go test ./...
+
+# Integration tests (real Postgres + NATS). Needs REQRADAR_TEST_DSN (db name must
+# contain "test") and a throwaway NATS at REQRADAR_TEST_NATS_URL (default :4222).
+test-integration:
+	go test -tags=integration ./internal/processor/... ./internal/bus/...
 
 fmt:
 	gofmt -w .

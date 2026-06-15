@@ -1,6 +1,6 @@
 # Alert-loss trio (H1 / H2 / H3)
 
-**Status:** open (as of 2026-06-15)
+**Status:** H3 fixed (2026-06-15); H1 + H2 open
 **Source:** [2026-06-15 progress audit](../audits/2026-06-15-progress-audit.md)
 **Theme:** three ways a genuinely-new posting's alert can be **silently dropped or stalled**. None corrupt data — Postgres stays correct — they are *alert-delivery* reliability gaps. They matter because the headline claim is "sub-minute detection-to-alert," and they are exactly what an interviewer probes when you say "event-driven, at-least-once delivery."
 
@@ -40,7 +40,9 @@ Findings H1 and H2 are two faces of the same **dual-write problem**: the process
 
 ---
 
-## H3 — no delivery cap / backoff on consumers (independent)
+## H3 — no delivery cap / backoff on consumers (independent) — FIXED
+
+**Fixed:** `internal/bus/bus.go` — both consumers now set `MaxDeliver(5)`, `AckWait(30s)`, `BackOff([30s, 2m, 5m])`. Verified by `internal/bus/bus_integration_test.go` (asserts the created consumers carry the config). Deploying requires recreating the existing durables — see the operational step below; `make nats-reset` does this in dev.
 
 **Where:** [internal/bus/bus.go:74-94](../../internal/bus/bus.go#L74) — both `SubscribeSignals` and `SubscribeEvents` use `ManualAck` + `AckExplicit` with **no `MaxDeliver`, `AckWait`, or `BackOff`**.
 
@@ -48,9 +50,11 @@ Findings H1 and H2 are two faces of the same **dual-write problem**: the process
 
 **Recommended fix (verified against nats.go v1.52.0):** add `nats.MaxDeliver(n)`, `nats.AckWait(d)`, and `nats.BackOff([...])` to both consumers. After `MaxDeliver` attempts NATS stops redelivering (the message is dropped from the work queue; an advisory is published). Backoff spaces out retries so a transient failure recovers without a hot loop.
 
-**API notes / gotchas (researched, not assumed):**
+**API notes / gotchas (verified against nats.go v1.52.0 source, not assumed):**
 - `nats.BackOff` requires `MaxDeliver >= len(backoff)`, or consumer creation fails. Set `MaxDeliver` explicitly above the backoff length.
-- Changing options on an **existing durable consumer** ("processor"/"dispatcher") triggers a consumer *update*; recent NATS servers allow updating `AckWait`/`MaxDeliver`/`BackOff`/`MaxAckPending` on a push consumer, but if an update is rejected the service fails to start. **Operational step:** after deploying this change, the existing durable consumers may need to be deleted so they're recreated with the new config. (Dev NATS has no volume, so `docker compose up -d --force-recreate nats` wipes them; prod uses file storage and persists them.)
+- **`js.Subscribe` binds to an existing durable; it does NOT update its config.** Verified: when the durable already exists, `js.Subscribe` takes the `case info != nil` branch and calls `processConsInfo` ([js.go:1559](https://github.com/nats-io/nats.go/blob/v1.52.0/js.go)), which **returns an error on mismatch** ("configuration requests max deliver to be N, but consumer's value is M"). So after this change ships, the processor/api services will **fail to start against the pre-existing "processor"/"dispatcher" consumers** until those are deleted and recreated with the new config. This is a *loud* failure (not a silent no-op), which is the safe outcome. **Operational step (required):** recreate the durable consumers on deploy. Dev NATS has no volume, so `make nats-reset` (force-recreate) wipes them; prod uses file storage and persists them, so delete them explicitly.
+- **When `BackOff` is set, NATS uses `BackOff[0]` as the ack deadline and overrides the separate `AckWait`.** Found by the verification test (it reported `AckWait = 5s` when `BackOff[0]` was 5s, despite `AckWait(30s)` being passed). Consequence: `BackOff[0]` must exceed the handler's worst-case processing time. The dispatcher's Telegram client has a 10s timeout, so `BackOff[0] = 5s` would let a slow-but-successful send exceed the ack deadline and trigger a **duplicate alert**. Final values use `BackOff[0] = 30s` (and `ackWait` is kept equal to it for clarity).
+- Terminal drop tradeoff: after `MaxDeliver` attempts the message is dropped. For the **SIGNALS** consumer this self-heals — the collector re-emits all active listings every poll (~5 min), so a dropped signal reappears. For the **EVENTS** consumer there is no re-emit, but events persist in Postgres and the EVENTS stream (90d) for manual replay, and a terminal drop is logged. Acceptable for single-user v1; `MaxDeliver` is set generously so only a genuinely-poison message is dropped.
 - Optionally add `nats.MaxAckPending(n)` to bound in-flight redeliveries.
 
 ---

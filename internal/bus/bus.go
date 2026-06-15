@@ -15,6 +15,27 @@ const (
 	EventsPrefix  = "events."      // + <type>
 )
 
+// Consumer redelivery policy (see docs/issues/alert-loss-trio.md, H3). Without a
+// MaxDeliver cap, a message whose handler always errors is Nak'd and redelivered
+// in a tight loop forever — pegged CPU, log spam, and head-of-line blocking that
+// delays every alert behind it. We cap deliveries and back off between retries so
+// a transient failure recovers without a hot loop, and a genuinely-poison message
+// is dropped after maxDeliver attempts (logged).
+//
+// Two constraints, both verified against NATS, not assumed:
+//   - maxDeliver must be >= len(redeliveryBackoff) or JetStream rejects the config.
+//   - When BackOff is set, NATS uses BackOff[0] as the ack deadline (it overrides
+//     AckWait). So BackOff[0] must exceed the handler's worst-case processing time
+//     — the dispatcher's Telegram send can take ~10s — or a slow-but-successful
+//     handler is considered un-acked and redelivered, causing a duplicate alert.
+//     We keep ackWait == redeliveryBackoff[0] so the intent is explicit.
+const (
+	maxDeliver = 5
+	ackWait    = 30 * time.Second // == redeliveryBackoff[0]
+)
+
+var redeliveryBackoff = []time.Duration{30 * time.Second, 2 * time.Minute, 5 * time.Minute}
+
 type Bus struct {
 	nc *nats.Conn
 	js nats.JetStreamContext
@@ -76,6 +97,9 @@ func (b *Bus) SubscribeSignals(handler nats.MsgHandler) (*nats.Subscription, err
 		nats.Durable("processor"),
 		nats.ManualAck(),
 		nats.AckExplicit(),
+		nats.MaxDeliver(maxDeliver),
+		nats.AckWait(ackWait),
+		nats.BackOff(redeliveryBackoff),
 	)
 }
 
@@ -90,6 +114,9 @@ func (b *Bus) SubscribeEvents(handler nats.MsgHandler) (*nats.Subscription, erro
 		nats.ManualAck(),
 		nats.AckExplicit(),
 		nats.DeliverNew(),
+		nats.MaxDeliver(maxDeliver),
+		nats.AckWait(ackWait),
+		nats.BackOff(redeliveryBackoff),
 	)
 }
 

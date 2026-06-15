@@ -68,7 +68,7 @@ jobs:
             sleep 1
           done
           curl -sf http://localhost:8222/healthz
-      - run: go test -tags=integration ./internal/processor/...
+      - run: go test -tags=integration ./internal/processor/... ./internal/bus/...
 
   frontend:
     runs-on: ubuntu-latest

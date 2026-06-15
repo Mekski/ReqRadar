@@ -4,6 +4,12 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Fix H3 — consumer redelivery cap (alert-loss trio)
+`internal/bus/bus.go`: both JetStream consumers now set `MaxDeliver(5)`, `AckWait(30s)`, `BackOff([30s, 2m, 5m])`, so a poison message can't be redelivered in an infinite loop (CPU/log spin + head-of-line blocking). Added `internal/bus/bus_integration_test.go` to assert the created consumers carry the config, and wired it into the CI `integration` job.
+- **Found via the test (not assumed):** when `BackOff` is set, NATS uses `BackOff[0]` as the ack deadline and overrides `AckWait`. With `BackOff[0]=5s` and the dispatcher's 10s Telegram timeout, a slow-but-successful send would be redelivered → duplicate alert. Fixed by setting `BackOff[0]=30s`.
+- **Deploy note:** `js.Subscribe` binds to (does not update) an existing durable, so deploying this requires recreating the "processor"/"dispatcher" consumers. Added `make nats-reset` (dev) and `make test-integration`. See [issues/alert-loss-trio.md](issues/alert-loss-trio.md).
+- H1 + H2 (transactional outbox) remain open.
+
 ### Documentation: `docs/` tree established
 Added this `docs/` directory (audits / issues / plans + changelog) to track the audit, findings, and forward plan. See [docs/README.md](README.md).
 
