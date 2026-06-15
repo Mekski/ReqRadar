@@ -5,6 +5,7 @@ package main
 import (
 	"github.com/Mekski/reqradar/internal/bus"
 	"github.com/Mekski/reqradar/internal/collector"
+	"github.com/Mekski/reqradar/internal/collector/ashby"
 	"github.com/Mekski/reqradar/internal/collector/greenhouse"
 	"github.com/Mekski/reqradar/internal/collector/simplify"
 	"github.com/Mekski/reqradar/internal/service"
@@ -38,6 +39,7 @@ func main() {
 	// row; the DB's enabled flag decides whether it actually runs.
 	r.Register("simplify-listings", simplify.New)
 	r.Register("greenhouse", greenhouse.New)
+	r.Register("ashby", ashby.New)
 
 	if err := r.Run(ctx); err != nil {
 		log.Error("runner stopped", "err", err)

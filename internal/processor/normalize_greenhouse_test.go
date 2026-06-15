@@ -59,7 +59,7 @@ func TestTermsFromTitle(t *testing.T) {
 	}
 }
 
-func TestGreenhouseCategory(t *testing.T) {
+func TestInferCategory(t *testing.T) {
 	cases := []struct {
 		title string
 		dept  []string
@@ -72,8 +72,8 @@ func TestGreenhouseCategory(t *testing.T) {
 		{"Product Design Intern", []string{"Design"}, ""},
 	}
 	for _, c := range cases {
-		if got := greenhouseCategory(c.title, c.dept); got != c.want {
-			t.Errorf("greenhouseCategory(%q, %v) = %q, want %q", c.title, c.dept, got, c.want)
+		if got := inferCategory(c.title, c.dept); got != c.want {
+			t.Errorf("inferCategory(%q, %v) = %q, want %q", c.title, c.dept, got, c.want)
 		}
 	}
 }

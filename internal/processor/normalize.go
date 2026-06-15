@@ -82,9 +82,47 @@ func normalizeGreenhouse(payload []byte) (Posting, error) {
 		URL:       e.URL,
 		Locations: e.Locations,
 		Terms:     termsFromTitle(e.Title),
-		Category:  greenhouseCategory(e.Title, e.Departments),
+		Category:  inferCategory(e.Title, e.Departments),
 	}
 	if pay, ok := extractPay(e.Content); ok {
+		p.PayMin, p.PayMax, p.PayPeriod, p.PayCurrency = pay.Min, pay.Max, pay.Period, pay.Currency
+	}
+	return p, nil
+}
+
+// normalizeAshby parses an ashby-collector payload. Like Greenhouse it has no
+// structured terms/category, so we derive them; company resolves via the org slug
+// (seeded as an alias — Ashby exposes no company name). Pay is extracted from the
+// JD HTML (the structured compensation field is typically empty for interns).
+func normalizeAshby(payload []byte) (Posting, error) {
+	var e struct {
+		Org         string `json:"org"`
+		Title       string `json:"title"`
+		URL         string `json:"url"`
+		Location    string `json:"location"`
+		Department  string `json:"department"`
+		Description string `json:"description"`
+	}
+	if err := json.Unmarshal(payload, &e); err != nil {
+		return Posting{}, err
+	}
+	var locations []string
+	if e.Location != "" {
+		locations = []string{e.Location}
+	}
+	var departments []string
+	if e.Department != "" {
+		departments = []string{e.Department}
+	}
+	p := Posting{
+		Company:   e.Org,
+		Title:     e.Title,
+		URL:       e.URL,
+		Locations: locations,
+		Terms:     termsFromTitle(e.Title),
+		Category:  inferCategory(e.Title, departments),
+	}
+	if pay, ok := extractPay(e.Description); ok {
 		p.PayMin, p.PayMax, p.PayPeriod, p.PayCurrency = pay.Min, pay.Max, pay.Period, pay.Currency
 	}
 	return p, nil
@@ -108,12 +146,12 @@ func termsFromTitle(title string) []string {
 	return []string{season}
 }
 
-// greenhouseCategory maps a Greenhouse title/departments onto the same category
-// vocabulary SimplifyJobs uses, so the SWE seasonality filter
-// (category IN ('Software','Software Engineering')) treats both sources alike.
-// Best-effort and deliberately coarse; the messy-category cleanup is a later
-// (LLM) task (CLAUDE.md LLM roadmap).
-func greenhouseCategory(title string, departments []string) string {
+// inferCategory maps an ATS title/departments onto the same category vocabulary
+// SimplifyJobs uses (shared by the Greenhouse and Ashby normalizers), so the SWE
+// seasonality filter (category IN ('Software','Software Engineering')) treats all
+// sources alike. Best-effort and deliberately coarse; the messy-category cleanup
+// is a later (LLM) task (CLAUDE.md LLM roadmap).
+func inferCategory(title string, departments []string) string {
 	hay := strings.ToLower(title + " " + strings.Join(departments, " "))
 	switch {
 	case strings.Contains(hay, "software") || strings.Contains(hay, "swe"):

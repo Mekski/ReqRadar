@@ -49,7 +49,7 @@ func New(ctx context.Context, st *store.Store, b *bus.Bus, log *slog.Logger) (*P
 		bus:         b,
 		log:         log,
 		resolver:    NewResolver(aliases, domains),
-		normalizers: map[string]Normalizer{"simplify-listings": normalizeSimplify, "greenhouse": normalizeGreenhouse},
+		normalizers: map[string]Normalizer{"simplify-listings": normalizeSimplify, "greenhouse": normalizeGreenhouse, "ashby": normalizeAshby},
 		sourceIDs:   sourceIDs,
 		recorded:    map[string]bool{},
 	}, nil

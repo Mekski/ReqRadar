@@ -4,6 +4,14 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Feature — Ashby collector (third source; first real card pay)
+Added `internal/collector/ashby` — one more `r.Register` line, polling the public Ashby posting-api board for openai/notion.
+- **Exact intern filter:** Ashby exposes a structured `employmentType`, so the filter is `employmentType == "Intern"` — no title/department heuristic, and OpenAI correctly yields 0 interns (its "intern" titles were all "Internal"/"International" false positives that Greenhouse's regex also had to guard against).
+- **Processor:** `normalizeAshby` resolves company via the org slug (Ashby has no company-name field), reusing the now-shared `inferCategory` (renamed from `greenhouseCategory`), `termsFromTitle`, and `extractPay`. Registered in the normalizers map.
+- **Same robustness as Greenhouse:** per-org conditional GET + error isolation, `publishedAt` → EventTime, description excluded from the content hash, `isListed`-gated, no Backfiller.
+- **Verified live:** Notion's "Software Engineer Intern (Fall 2026)" resolved → Software Engineering, **$57/hr** extracted from its JD — the first real pay value to render on a card (proves the whole collector→pay→card path end to end).
+- Tests: golden parse, the employmentType filter table, hash-volatility, toSignal (RFC3339 millis), conditional-GET, partial/all-org failure, plus `normalizeAshby`.
+
 ### Feature — posted pay-range extraction (replaces the card "???")
 Greenhouse JDs carry pay in the `content` HTML (`pay_input_ranges` is unused by these orgs), so `internal/processor/pay.go` `extractPay` parses it.
 - **Conservative by design:** only extracts when a period keyword (hourly/annual/monthly) sits within ~40 chars of a `$` amount, on EITHER side (Greenhouse writes "Hourly Pay Range $72 — $72 USD" — keyword before), AND the value passes a per-period plausibility band. A test caught "$5 billion … annual revenue" extracting as "$5 annual"; the band (hourly $7–500, monthly $500–60k, annual $10k–2M) rejects it. Better to show nothing than wrong comp.
