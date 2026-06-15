@@ -4,6 +4,14 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Feature — "expected open" curated-seed fallback + seed-drift reconciliation + dead-LLM cleanup
+Shipped the sparse-company fallback for the dashboard's flagship "expected open" month (CLAUDE.md item 1a). The confidence gate (`attachExpected`, `minSamples=5`) leaves 11/20 companies without a data-derived month; those now show a **curated estimate** instead of "—".
+- **Plumbing:** `expected_estimate` flows YAML → `cmd/seed` → `store.UpsertCompany` (into `entities.metadata`) → `CompanySummary` on `/api/companies` → `CompanyCard.tsx`. UI priority: data-month → estimate ("≈ est.") → "rolling" → "—".
+- **Values (researched, cited in the YAML):** months Google→Oct, Riot→Sep, Databricks→Aug, GitHub→Sep, LinkedIn→Sep, Roblox→Jul; **"rolling"** for Anthropic/OpenAI/xAI/Notion/Niantic (no documented season — honest over a fabricated month). Source: deep-research workflow + targeted web search.
+- **Seed drift reconciled:** `seed/watchlist.yaml` now mirrors the live watchlist (tiers aligned to dashboard edits; Tesla/TikTok/Databricks/GitHub/LinkedIn added), so `make seed` is reproducible and non-destructive. Verified the user's `telegram_chat_id` survives a re-seed. Gotcha documented: `make seed` does not auto-load `.env`.
+- **Dead-code cleanup (Mark's request):** removed `ANTHROPIC_API_KEY` from `.env.example` and fixed a stale "LLM-estimate fallback" comment in `api.go`. Confirmed via grep that **no LLM client code ever existed** (no package, no HTTP calls, config never read the key) — nothing functional to remove. The free-tier-only LLM decision stands (CLAUDE.md LLM roadmap).
+- Go tests + vet green; feature verified live against the running stack (all 20 cards show a meaningful value, data-vs-estimate priority correct).
+
 ### Fix H1 + H2 — transactional outbox (alert-loss trio)
 The processor wrote to Postgres *and* published to NATS as a dual write; a publish failure after commit (H2) or after marking a firehose posting seen (H1) silently dropped the alert forever. Fixed with a **transactional outbox**:
 - New `event_outbox` table (migration `000007`); events are staged in the **same transaction** as their posting/firehose writes.

@@ -64,7 +64,18 @@ export function CompanyCard({ company, index = 0 }: { company: Company; index?: 
         <div className="mt-4 flex items-end justify-between">
           <div>
             <div className="font-mono text-[10px] uppercase tracking-widest text-dim">expected</div>
-            <div className="font-mono text-lg font-medium text-accent">{company.expected_open || "—"}</div>
+            {company.expected_open ? (
+              <div className="font-mono text-lg font-medium text-accent">{company.expected_open}</div>
+            ) : company.expected_estimate === "rolling" ? (
+              <div className="font-mono text-base font-medium text-muted">rolling</div>
+            ) : company.expected_estimate ? (
+              <div className="font-mono text-lg font-medium text-accent/70">
+                {company.expected_estimate}
+                <span className="ml-1 align-middle text-[10px] text-dim">≈ est.</span>
+              </div>
+            ) : (
+              <div className="font-mono text-lg font-medium text-muted">—</div>
+            )}
           </div>
           <div className="text-right">
             <div className="font-mono text-[10px] uppercase tracking-widest text-dim">pay</div>

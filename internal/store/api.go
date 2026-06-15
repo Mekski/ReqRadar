@@ -88,18 +88,23 @@ func (s *Store) FirstUserID(ctx context.Context) (int64, error) {
 
 // CompanyInput is the data needed to add/update a watchlist company.
 type CompanyInput struct {
-	Name     string
-	Domain   string
-	Priority string
-	Source   string   // 'seed' | 'manual'
-	Aliases  []string // raw; normalized + canonical-name-added inside UpsertCompany
+	Name             string
+	Domain           string
+	Priority         string
+	Source           string   // 'seed' | 'manual'
+	Aliases          []string // raw; normalized + canonical-name-added inside UpsertCompany
+	ExpectedEstimate string   // curated summer-SWE open month, e.g. "Sep" (seed only; blank for manual adds)
 }
 
 // UpsertCompany creates or updates a company entity, its aliases, and the
 // watchlist row for userID — the one definition shared by cmd/seed and the
 // POST /api/companies handler. Runs inside the caller's transaction (q).
 func (s *Store) UpsertCompany(ctx context.Context, q DBTX, userID int64, in CompanyInput) (int64, error) {
-	meta, _ := json.Marshal(map[string]any{"priority": in.Priority})
+	metaMap := map[string]any{"priority": in.Priority}
+	if in.ExpectedEstimate != "" {
+		metaMap["expected_estimate"] = in.ExpectedEstimate
+	}
+	meta, _ := json.Marshal(metaMap)
 	var entityID int64
 	if err := q.QueryRow(ctx,
 		`INSERT INTO entities (kind, canonical_name, domain, metadata)
@@ -191,8 +196,9 @@ type CompanySummary struct {
 	Priority     string         `json:"priority"`
 	OpenPostings int            `json:"open_postings"`
 	TotalEvents  int            `json:"total_events"`
-	Timing       []TimingBucket `json:"timing"`        // last 12 months
-	ExpectedOpen string         `json:"expected_open"` // SWE seasonality peak month, e.g. "Aug"
+	Timing       []TimingBucket `json:"timing"`            // last 12 months
+	ExpectedOpen string         `json:"expected_open"`     // data-derived SWE seasonality peak month, e.g. "Aug" ("" if too few samples)
+	ExpectedEst  string         `json:"expected_estimate"` // curated fallback month when data is sparse (the UI labels it "≈ est.")
 }
 
 var monthAbbr = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}
@@ -200,6 +206,7 @@ var monthAbbr = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
 func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]CompanySummary, error) {
 	rows, err := s.Pool.Query(ctx,
 		`SELECT e.id, e.canonical_name, COALESCE(e.domain, ''), COALESCE(e.metadata->>'priority', ''),
+		        COALESCE(e.metadata->>'expected_estimate', ''),
 		        (SELECT count(*) FROM postings p WHERE p.entity_id = e.id AND p.status = 'open'),
 		        (SELECT count(*) FROM events ev WHERE ev.entity_id = e.id)
 		 FROM watchlist w JOIN entities e ON e.id = w.entity_id
@@ -212,7 +219,7 @@ func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]Company
 	var out []CompanySummary
 	for rows.Next() {
 		var c CompanySummary
-		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.Priority, &c.OpenPostings, &c.TotalEvents); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.Priority, &c.ExpectedEst, &c.OpenPostings, &c.TotalEvents); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
@@ -275,7 +282,8 @@ func (s *Store) attachExpected(ctx context.Context, companies []CompanySummary) 
 	}
 
 	// Only trust the data-derived month with enough summer-SWE history; sparse
-	// companies (1–2 postings = noise) are left blank for the LLM-estimate fallback.
+	// companies (1–2 postings = noise) are left blank, so the UI falls back to the
+	// curated expected_estimate from the seed (entities.metadata).
 	const minSamples = 5
 	for id, a := range stats {
 		if a.total >= minSamples && a.peakMonth >= 1 {

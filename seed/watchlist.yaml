@@ -9,40 +9,57 @@ user:
   # (reuse the bot/chat from job-watch). Re-run seed after setting it.
 
 companies:
-  # --- Top priority: directly pollable via Greenhouse/Ashby ---
+  # `expected_estimate` is a CURATED summer-SWE open-month estimate, shown on the
+  # dashboard ONLY when a company lacks ≥5 backfilled summer-SWE postings (the
+  # data-derived month wins when present — see attachExpected, minSamples=5). It
+  # is static reference data, deliberately NOT a runtime LLM call (DESIGN §10 / the
+  # 2026-06-16 decision). Use "rolling" for companies that hire continuously with
+  # no documented season (mostly the AI labs). Sources noted per company; the 9
+  # data-derived companies (Amazon/Apple/EA/Epic/Meta/Microsoft/NVIDIA/Tesla/TikTok)
+  # carry no estimate because their real timing already qualifies.
+  #
+  # Tiers below mirror the live watchlist as of 2026-06-15 (reconciled with the
+  # dashboard edits) so `make seed` is reproducible and non-destructive.
+
+  # --- Directly pollable via Greenhouse/Ashby ---
   - canonical_name: Roblox
     domain: roblox.com
     priority: S
     ats: { platform: greenhouse, slug: roblox }
     aliases: [roblox]
+    expected_estimate: Jul # first SWE-intern round historically opens Jul–Aug (a later round + the March Lua apprenticeship are separate)
 
   - canonical_name: Anthropic
     domain: anthropic.com
     priority: S
     ats: { platform: greenhouse, slug: anthropic }
     aliases: [anthropic]
+    expected_estimate: rolling # Greenhouse, reviewed on a rolling basis; no fixed season (alignment.anthropic.com)
 
   - canonical_name: OpenAI
     domain: openai.com
-    priority: S
+    priority: A
     ats: { platform: ashby, slug: openai }
     aliases: [openai, open ai]
+    expected_estimate: rolling # "adaptive to business needs," hires on a rolling basis (openai.com/residency)
 
   - canonical_name: xAI
     domain: x.ai
-    priority: S
+    priority: A
     ats: { platform: greenhouse, slug: xai }
     aliases: [xai, x.ai, x ai]
+    expected_estimate: rolling # ad-hoc/rolling postings, no documented intern season
 
   - canonical_name: Riot Games
     domain: riotgames.com
     priority: S
     ats: { platform: greenhouse, slug: riotgames }
     aliases: [riot games, riotgames, riot]
+    expected_estimate: Sep # SWE roles live late Sept, deadline ~Oct 31 (Riot LinkedIn)
 
   - canonical_name: Epic Games
     domain: epicgames.com
-    priority: A
+    priority: B
     ats: { platform: greenhouse, slug: epicgames }
     aliases: [epic games, epicgames]
 
@@ -51,12 +68,14 @@ companies:
     priority: A
     ats: { platform: ashby, slug: notion }
     aliases: [notion, notion labs, notion.com]
+    expected_estimate: rolling # Ashby, "apply as soon as possible," fills on a rolling basis
 
   # --- Proprietary careers sites: detected via the SimplifyJobs aggregator ---
   - canonical_name: Google
     domain: google.com
-    priority: A
+    priority: S
     aliases: [google, google llc, alphabet, google deepmind, deepmind]
+    expected_estimate: Oct # opens ~mid-Oct of the prior year, short 2–4 week window (Simplify FAQ)
 
   - canonical_name: Apple
     domain: apple.com
@@ -70,12 +89,12 @@ companies:
 
   - canonical_name: Meta
     domain: meta.com
-    priority: A
+    priority: S
     aliases: [meta, meta platforms, facebook, fb]
 
   - canonical_name: NVIDIA
     domain: nvidia.com
-    priority: A
+    priority: B
     aliases: [nvidia]
 
   - canonical_name: Electronic Arts
@@ -85,8 +104,36 @@ companies:
 
   - canonical_name: Amazon
     domain: amazon.com
-    priority: C
+    priority: B
     aliases: [amazon, amazon.com, aws, amazon web services]
+
+  - canonical_name: Tesla
+    domain: tesla.com
+    priority: B
+    aliases: [tesla]
+
+  - canonical_name: TikTok
+    domain: tiktok.com
+    priority: B
+    aliases: [tiktok, bytedance]
+
+  - canonical_name: Databricks
+    domain: databricks.com
+    priority: A
+    aliases: [databricks]
+    expected_estimate: Aug # earliest non-FAANG opener, rolling Jul–Aug (secondary guides; medium confidence)
+
+  - canonical_name: GitHub
+    domain: github.com
+    priority: A
+    aliases: [github]
+    expected_estimate: Sep # opens in the Jul–Sep big-tech wave (~Sep–Oct), follows Microsoft's cycle
+
+  - canonical_name: LinkedIn
+    domain: linkedin.com
+    priority: A
+    aliases: [linkedin]
+    expected_estimate: Sep # big-tech early-fall wave; no LinkedIn-specific public timing (low confidence)
 
   # Niantic's games division folded into Scopely (2025); careers redirect there.
   # Kept low-priority pending a decision to drop or repoint. See WATCHLIST.md.
@@ -94,6 +141,7 @@ companies:
     domain: nianticlabs.com
     priority: C
     aliases: [niantic, niantic labs]
+    expected_estimate: rolling # sparse, irregular postings post-Scopely; no consistent season
 
 # Non-ATS sources. Greenhouse/Ashby source rows are derived from the per-company
 # `ats` blocks above (single source of truth), so they are not repeated here.

@@ -27,11 +27,12 @@ type seedFile struct {
 }
 
 type company struct {
-	CanonicalName string   `yaml:"canonical_name"`
-	Domain        string   `yaml:"domain"`
-	Priority      string   `yaml:"priority"`
-	Aliases       []string `yaml:"aliases"`
-	ATS           *struct {
+	CanonicalName    string   `yaml:"canonical_name"`
+	Domain           string   `yaml:"domain"`
+	Priority         string   `yaml:"priority"`
+	ExpectedEstimate string   `yaml:"expected_estimate"` // curated summer-SWE open month (fallback when data is sparse)
+	Aliases          []string `yaml:"aliases"`
+	ATS              *struct {
 		Platform string `yaml:"platform"`
 		Slug     string `yaml:"slug"`
 	} `yaml:"ats"`
@@ -87,7 +88,8 @@ func main() {
 			aliases = append(aliases, c.ATS.Slug)
 		}
 		if _, err := st.UpsertCompany(ctx, tx, userID, store.CompanyInput{
-			Name: c.CanonicalName, Domain: c.Domain, Priority: c.Priority, Source: "seed", Aliases: aliases,
+			Name: c.CanonicalName, Domain: c.Domain, Priority: c.Priority, Source: "seed",
+			Aliases: aliases, ExpectedEstimate: c.ExpectedEstimate,
 		}); err != nil {
 			log.Fatalf("upsert company %s: %v", c.CanonicalName, err)
 		}

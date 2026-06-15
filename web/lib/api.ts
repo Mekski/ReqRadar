@@ -13,7 +13,8 @@ export type Company = {
   open_postings: number;
   total_events: number;
   timing: TimingBucket[] | null; // Go marshals an empty slice as null
-  expected_open: string; // SWE peak month, e.g. "Aug" ("" if unknown)
+  expected_open: string; // data-derived SWE peak month, e.g. "Aug" ("" if too few samples)
+  expected_estimate: string; // curated fallback month when data is sparse ("" if none)
 };
 
 export type TimelineEvent = {
