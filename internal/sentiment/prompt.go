@@ -20,6 +20,11 @@ STRICT ANTI-HALLUCINATION RULES (follow exactly):
   number of interview rounds, stipend amounts, ratings, or quotes.
 - If you cannot find real information for a section or a bullet, write exactly:
   "_Not enough public information found._" — do NOT guess or pad with generic filler.
+- BE SPECIFIC. Name actual programs, platforms, figures, and proper nouns from your
+  sources. A statement that could apply to almost ANY company — "they have a careers
+  page", "they recruit at universities", "they value collaboration", "they offer
+  internships" — is filler: OMIT it. Every bullet must be either a concrete, sourced
+  specific or the not-found line above. Vague generalities are worse than saying nothing.
 - Prefer recent discussion (last ~2 years) and intern / new-grad perspectives.
 - Report conflicting takes honestly ("some say X, others say Y").
 
@@ -50,13 +55,29 @@ find no housing-stipend information, say so explicitly — do not guess.
 ## Return offers & conversion
 What people say about intern → return-offer rates and full-time conversion.
 
-## Early-talent programs & ways in
-Specific programs or paths toward an internship or direct consideration — e.g.
-student / early-talent or "insider"/ambassador programs, diversity & inclusion
-pipelines, hackathons or coding challenges the company runs, info sessions / campus
-recruiting, and referral routes. For each, give the **program name**, what it is in a
-few words, who it's for, and **timing/deadlines** if found. List only real, sourced
-programs; if you find none, write "_Not enough public information found._"
+## Ways in (beyond just applying)
+NON-obvious edges that improve your odds — NOT internship or job postings. Applying to a
+posted role (even a special one like an apprenticeship or a "University"-style program) is
+the front door, so do NOT list internship/job openings here. Search specifically for these
+and report only what your sources support:
+- **Referrals — how much they matter HERE:** be specific to this company, not generic. At
+  large FAANG-scale companies a referral is often just a weak nudge to get a resume looked
+  at; at smaller / mid-size companies a referral from a current or former intern can carry
+  real weight. Say what people actually report for THIS company.
+- **Hackathons & competitions:** named contests the company runs or sponsors where doing
+  well can get you noticed, interviewed, or fast-tracked (e.g. a coding challenge whose top
+  finishers get recruiter contact).
+- **Ambassador / student-rep / community programs:** named programs that build a
+  relationship with the company or its recruiters (campus ambassador, student community,
+  creator/developer community) — NOT a paid role.
+- **Events that lead to consideration:** specific webinars, info sessions, tech talks, or
+  recruiting events that people report led to a resume drop, recruiter contact, or an
+  interview.
+- **Other edges:** open-source contribution, active community/Discord presence, or
+  scholarships/fellowships documented to feed into hiring.
+Name each program/event by its real name; include it only if search results support it. Do
+NOT list regular internship/job postings here. If you find no real way in beyond normal
+applications, write exactly "_Not enough public information found._"
 
 ## Watch-outs
 Common complaints or red flags, if any.
