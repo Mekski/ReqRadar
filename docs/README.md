@@ -24,6 +24,7 @@ docs/
 | [issues/audit-findings.md](issues/audit-findings.md) | The rest of the audit findings (auth gap, CORS, Telegram error handling, frontend) with status |
 | [plans/roadmap.md](plans/roadmap.md) | Prioritized next steps from the audit's perspective |
 | [changelog.md](changelog.md) | What has been changed and verified |
+| [resume-bullets.md](resume-bullets.md) | DRAFT résumé bullets for the project (potential, subject to change) |
 
 ## Conventions
 
