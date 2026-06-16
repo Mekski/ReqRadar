@@ -34,7 +34,9 @@ func (s *Service) Score(ctx context.Context, resumeText, jdText string, postingI
 	if resumeText == "" || jdText == "" {
 		return nil, false, fmt.Errorf("resume and job description are both required")
 	}
-	jdHash, resumeHash := hash(jdText), hash(resumeText)
+	// Fold the prompt version into the JD hash so a prompt/rubric change invalidates
+	// stale cached scores instead of serving the old grade.
+	jdHash, resumeHash := hash(promptVersion+"\x00"+jdText), hash(resumeText)
 
 	if cached, ok, err := s.store.GetFitScore(ctx, jdHash, resumeHash); err != nil {
 		return nil, false, err
