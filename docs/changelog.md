@@ -4,6 +4,13 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-16
 
+### Feature — Sentiment card scaffolding (grounded web search, on-demand)
+On-demand "what does the community say" report per company (prestige, culture, interview process incl. OA difficulty / # rounds, intern pay & **housing stipend**, return offers, watch-outs). Built end-to-end except the live call (same pending `GEMINI_API_KEY`).
+- **Grounded search, not collectors (architecture call):** Gemini "Grounding with Google Search" — free on 2.5 Flash (1,500 grounded req/day, far beyond single-user need; [pricing](https://www.aifreeapi.com/en/posts/gemini-api-pricing-and-quotas)). Searches the whole public web (Reddit/HN/blogs + Glassdoor/Blind *snippets* — we never scrape them) instead of us building+running HN/Reddit collectors. Less plumbing, broader coverage, real citations.
+- **On-demand + one-per-company:** a button on the company detail page generates the report; `company_sentiment` (migration `000012`) is keyed UNIQUE on entity_id, so regenerate UPSERTs (replaces the old). Never auto-run — no grounded call is spent on a company nobody asked about.
+- **Anti-hallucination:** the prompt forbids inventing specifics and mandates "_Not enough public information found._" for anything it can't source (e.g. stipends). **Citations are the real `groundingMetadata` URIs** (not model-authored), stored + shown.
+- **Pieces:** `llm.GenerateGrounded` (`google_search` tool + source extraction), `internal/sentiment` (structured-markdown prompt + service), `GET/POST /api/companies/{id}/sentiment`, `SentimentCard.tsx` (react-markdown + generate/regenerate + sources + generated-at, themed markdown CSS). Verified graceful-not-configured; Go tests + tsc green.
+
 ### Feature — Fit score scaffolding (first LLM feature; free-tier Gemini)
 Built the fit-score feature end-to-end except the live model call (pending Mark's `GEMINI_API_KEY`). Match a resume against a JD → rubric-based 0–100 + matched/missing skills + resume tips.
 - **`internal/llm`** — provider interface + Gemini client (free-tier, `responseMimeType: application/json`, temp 0.2). Key/model from config (`GEMINI_API_KEY`, `GEMINI_MODEL` default `gemini-2.5-flash`); empty key ⇒ a clean 503 "not configured", not a crash (verified live).

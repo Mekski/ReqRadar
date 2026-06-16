@@ -43,10 +43,16 @@ Note free-tier rate limits — prioritize, don't ship all at once. Expected-open
 - **Prompt** (Mark-approved) lives in `internal/fit/prompt.go` — rubric-anchored (Technical 40 / Experience 25 / Impact 15 / Eligibility 10 / ATS 10) so scores are consistent + defensible; intern-calibrated; cites resume evidence; specific suggestions.
 - **Architecture invariants honored:** LLM reached only on-demand from `POST /api/fit`, **never the alert path**; **cache forever** — `fit_scores` UNIQUE (jd_hash, resume_hash) ⇒ one Gemini call per unique (JD, resume) pair, ever (mirrors the resolution cache). Migration `000011`.
 - **Gotcha:** `jd_text` (like pay) is set on posting INSERT only, so existing ATS postings need a delete-+-re-poll (or a future re-extract) to populate it — done once for the current set.
-- **Next (Phase 2, cheap):** resume/JD optimization tips (same inputs, extend the call). Then sentiment/interview-prep (need HN/Reddit collectors), category-cleanup (maybe).
+- **Next (Phase 2, cheap):** resume/JD optimization tips (same inputs, extend the call).
+
+**✅ Sentiment card — SCAFFOLDED (2026-06-16), pending the same `GEMINI_API_KEY`.** On-demand "what does the community say" report on the **company detail page**.
+- **Architecture pivot (Mark's idea, my agreement): grounded web search, NOT HN/Reddit collectors.** Gemini "Grounding with Google Search" (free on 2.5 Flash: **1,500 grounded req/day**, far beyond single-user need) searches the whole public web — Reddit/HN/blogs + Glassdoor/Blind *snippets that surface in results* (we never scrape them ourselves → legally clean). This beat building HN+Reddit collectors: less plumbing, broader/fresher coverage, real citations, and it directly answers Mark's wishlist (OA difficulty, # rounds, intern pay/**housing stipend**, prestige, culture). The deterministic collector pipeline stays for structured/real-time data (postings/timing/alerts); grounded search for the fuzzy/qualitative data — a defensible right-tool-per-job split.
+- **On-demand only** (button on the company view), **never auto** — so we never spend a grounded call on a company Mark doesn't care about. **One row per company** (`company_sentiment`, UNIQUE entity_id, migration `000012`); regenerate UPSERTs (replaces the old — "store latest, delete old"). LLM reached only here, never the alert path.
+- **Anti-hallucination is built into the prompt** (`internal/sentiment/prompt.go`): answer ONLY from search results; write "_Not enough public information found._" for anything (e.g. housing stipends) it can't source — no guessing. **Citations are the real grounding URIs** from `groundingMetadata` (not model-authored, so unfakeable), stored + shown.
+- **Pieces:** `llm.GenerateGrounded` (adds the `google_search` tool, extracts text + source URIs); `internal/sentiment`; `GET/POST /api/companies/{id}/sentiment`; `web/.../SentimentCard.tsx` (react-markdown render + generate/regenerate button + sources + generated-at). Structured markdown (Overall / Prestige / Culture / Interview process / Intern pay & housing / Return offers / Watch-outs / Confidence). Verified graceful-not-configured.
 
 **Wanted (Mark's picks):**
-- **Sentiment summaries** — summarize HN/Reddit chatter per company. (Genuine LLM use; needs the HN/Reddit collectors first.)
+- **Sentiment summaries** — ✅ scaffolded as the grounded **sentiment card** (see above). Interview-prep is now largely folded into its "Interview process" section.
 - **Fit score** — ✅ scaffolded (see above).
 - **Resume / JD optimization tips** — per target role, suggest resume tweaks to match the JD / pass ATS. (Pairs with fit score.)
 - **Interview-prep brief per company** — synthesize the interview process from public chatter; similar pipeline to sentiment.

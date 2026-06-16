@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/Mekski/reqradar/internal/fit"
+	"github.com/Mekski/reqradar/internal/sentiment"
 	"github.com/Mekski/reqradar/internal/store"
 )
 
@@ -14,14 +15,15 @@ import (
 // one fixed userID and has no auth of its own (Caddy basic-auth fronts it in
 // prod; see DESIGN §3.3). Multi-user later means deriving userID from a session.
 type Server struct {
-	store  *store.Store
-	log    *slog.Logger
-	userID int64
-	fit    *fit.Service
+	store     *store.Store
+	log       *slog.Logger
+	userID    int64
+	fit       *fit.Service
+	sentiment *sentiment.Service
 }
 
-func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service) http.Handler {
-	s := &Server{store: st, log: log, userID: userID, fit: fitSvc}
+func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service, sentSvc *sentiment.Service) http.Handler {
+	s := &Server{store: st, log: log, userID: userID, fit: fitSvc, sentiment: sentSvc}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
@@ -42,6 +44,9 @@ func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Serv
 	mux.HandleFunc("GET /api/fit/jds", s.fitJDs)
 	mux.HandleFunc("GET /api/fit/status", s.fitStatus)
 	mux.HandleFunc("POST /api/fit", s.scoreFit)
+	// Sentiment (grounded LLM): the stored report + on-demand (re)generation.
+	mux.HandleFunc("GET /api/companies/{id}/sentiment", s.getSentiment)
+	mux.HandleFunc("POST /api/companies/{id}/sentiment", s.generateSentiment)
 	return cors(mux)
 }
 

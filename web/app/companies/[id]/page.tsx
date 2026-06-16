@@ -2,6 +2,7 @@ import Link from "next/link";
 import { getCompanies, getTimeline, getSeasonality } from "@/lib/api";
 import { Logo } from "@/app/components/Logo";
 import { Seasonality, expectedWindow } from "@/app/components/Seasonality";
+import { SentimentCard } from "@/app/components/SentimentCard";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -81,6 +82,8 @@ export default async function CompanyPage({
         </p>
         <Seasonality season={season} />
       </section>
+
+      <SentimentCard companyId={cid} />
 
       {/* One clear, dated list of roles seen (replaces the old ambiguous split). */}
       <section className="panel rounded-xl p-5">

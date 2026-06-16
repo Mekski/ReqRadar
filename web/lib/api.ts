@@ -66,6 +66,25 @@ export type FitResult = {
   suggestions: string[];
 };
 
+// ---- Sentiment (grounded LLM report) ----
+
+export type SentimentSource = { title: string; uri: string };
+export type SentimentReport = {
+  report: string; // markdown
+  sources: SentimentSource[];
+  model: string;
+  generated_at: string;
+};
+
+export const getSentiment = (id: number) =>
+  get<{ configured: boolean; report: SentimentReport | null }>(`/api/companies/${id}/sentiment`);
+
+export async function generateSentiment(id: number): Promise<SentimentReport> {
+  const res = await fetch(`${API_BASE}/api/companies/${id}/sentiment`, { method: "POST" });
+  if (!res.ok) throw new Error((await res.text()) || `generate → ${res.status}`);
+  return res.json() as Promise<SentimentReport>;
+}
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);

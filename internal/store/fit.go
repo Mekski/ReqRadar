@@ -130,3 +130,52 @@ func (s *Store) PostingJD(ctx context.Context, postingID int64) (string, error) 
 	err := s.Pool.QueryRow(ctx, `SELECT COALESCE(jd_text, '') FROM postings WHERE id = $1`, postingID).Scan(&jd)
 	return jd, err
 }
+
+// CompanyName returns a watchlist entity's canonical name (the grounded-search
+// subject for sentiment).
+func (s *Store) CompanyName(ctx context.Context, entityID int64) (string, error) {
+	var name string
+	err := s.Pool.QueryRow(ctx, `SELECT canonical_name FROM entities WHERE id = $1`, entityID).Scan(&name)
+	return name, err
+}
+
+// ---- Company sentiment (on-demand grounded report; one row per company) ----
+
+type Sentiment struct {
+	Report      string          `json:"report"`  // markdown
+	Sources     json.RawMessage `json:"sources"` // [{title,uri}]
+	Model       string          `json:"model"`
+	GeneratedAt time.Time       `json:"generated_at"`
+}
+
+// GetSentiment returns the stored report for a company, if one was generated.
+func (s *Store) GetSentiment(ctx context.Context, entityID int64) (*Sentiment, error) {
+	var sn Sentiment
+	err := s.Pool.QueryRow(ctx,
+		`SELECT report, sources, model, generated_at FROM company_sentiment WHERE entity_id = $1`, entityID).
+		Scan(&sn.Report, &sn.Sources, &sn.Model, &sn.GeneratedAt)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &sn, nil
+}
+
+// UpsertSentiment stores the latest report, replacing any prior one (regenerate
+// = delete-old-then-store-new, atomically).
+func (s *Store) UpsertSentiment(ctx context.Context, entityID int64, report string, sources json.RawMessage, model string) (*Sentiment, error) {
+	var sn Sentiment
+	err := s.Pool.QueryRow(ctx,
+		`INSERT INTO company_sentiment (entity_id, report, sources, model)
+		 VALUES ($1, $2, $3, $4)
+		 ON CONFLICT (entity_id) DO UPDATE
+		   SET report = EXCLUDED.report, sources = EXCLUDED.sources, model = EXCLUDED.model, generated_at = now()
+		 RETURNING report, sources, model, generated_at`,
+		entityID, report, sources, model).Scan(&sn.Report, &sn.Sources, &sn.Model, &sn.GeneratedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &sn, nil
+}

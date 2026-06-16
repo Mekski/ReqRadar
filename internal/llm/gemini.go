@@ -86,6 +86,79 @@ func (g *Gemini) GenerateJSON(ctx context.Context, prompt string) ([]byte, error
 	return []byte(out.Candidates[0].Content.Parts[0].Text), nil
 }
 
+// GenerateGrounded runs the prompt with the google_search tool so the model
+// answers from live web results, and returns those results' URLs from
+// groundingMetadata (the actual sources searched — not model-written, so they
+// can't be hallucinated). No responseMimeType: grounding + forced-JSON don't
+// reliably combine, and the sentiment report is markdown anyway.
+func (g *Gemini) GenerateGrounded(ctx context.Context, prompt string) (string, []Source, error) {
+	if g.key == "" {
+		return "", nil, ErrNotConfigured
+	}
+	reqBody := map[string]any{
+		"contents":         []any{map[string]any{"parts": []any{map[string]any{"text": prompt}}}},
+		"tools":            []any{map[string]any{"google_search": map[string]any{}}},
+		"generationConfig": map[string]any{"temperature": 0.3},
+	}
+	body, _ := json.Marshal(reqBody)
+
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", g.model, g.key)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return "", nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return "", nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return "", nil, fmt.Errorf("gemini status %d: %s", resp.StatusCode, truncate(raw, 300))
+	}
+
+	var out struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+			GroundingMetadata struct {
+				GroundingChunks []struct {
+					Web struct {
+						URI   string `json:"uri"`
+						Title string `json:"title"`
+					} `json:"web"`
+				} `json:"groundingChunks"`
+			} `json:"groundingMetadata"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return "", nil, fmt.Errorf("parse gemini response: %w", err)
+	}
+	if len(out.Candidates) == 0 || len(out.Candidates[0].Content.Parts) == 0 {
+		return "", nil, fmt.Errorf("gemini returned no content")
+	}
+
+	var text string
+	for _, p := range out.Candidates[0].Content.Parts {
+		text += p.Text
+	}
+	var sources []Source
+	seen := map[string]bool{}
+	for _, ch := range out.Candidates[0].GroundingMetadata.GroundingChunks {
+		if ch.Web.URI == "" || seen[ch.Web.URI] {
+			continue
+		}
+		seen[ch.Web.URI] = true
+		sources = append(sources, Source{Title: ch.Web.Title, URI: ch.Web.URI})
+	}
+	return text, sources, nil
+}
+
 func truncate(b []byte, n int) string {
 	if len(b) > n {
 		return string(b[:n])

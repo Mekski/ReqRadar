@@ -81,3 +81,27 @@ body {
   .rise, .pulse-soft { animation: none; opacity: 1; }
   .glow-hover:hover { transform: none; }
 }
+
+/* Rendered markdown (sentiment report) — scoped so it reads cleanly on the dark UI. */
+.markdown h2 {
+  font-family: var(--font-jbmono), monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--color-accent);
+  margin: 1.25rem 0 0.4rem;
+}
+.markdown h2:first-child { margin-top: 0; }
+.markdown p { margin: 0.4rem 0; line-height: 1.6; }
+.markdown ul { list-style: disc; padding-left: 1.1rem; margin: 0.3rem 0; }
+.markdown li { margin: 0.15rem 0; line-height: 1.5; }
+.markdown strong { color: var(--color-ink); font-weight: 600; }
+.markdown em { color: var(--color-dim); font-style: italic; }
+.markdown a { color: var(--color-accent); text-decoration: underline; }
+.markdown code {
+  font-family: var(--font-jbmono), monospace;
+  font-size: 0.85em;
+  background: var(--color-overlay, rgba(79,140,255,0.08));
+  padding: 0.05rem 0.3rem;
+  border-radius: 0.25rem;
+}

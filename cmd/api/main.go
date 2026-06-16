@@ -16,6 +16,7 @@ import (
 	"github.com/Mekski/reqradar/internal/bus"
 	"github.com/Mekski/reqradar/internal/fit"
 	"github.com/Mekski/reqradar/internal/llm"
+	"github.com/Mekski/reqradar/internal/sentiment"
 	"github.com/Mekski/reqradar/internal/service"
 	"github.com/Mekski/reqradar/internal/signal"
 	"github.com/Mekski/reqradar/internal/store"
@@ -79,10 +80,12 @@ func main() {
 	if cfg.GeminiKey == "" {
 		log.Warn("GEMINI_API_KEY not set — fit scoring will return 'not configured' until it is")
 	}
-	fitSvc := fit.New(llm.NewGemini(cfg.GeminiKey, cfg.GeminiModel), st)
+	gemini := llm.NewGemini(cfg.GeminiKey, cfg.GeminiModel)
+	fitSvc := fit.New(gemini, st)
+	sentSvc := sentiment.New(gemini, st)
 
 	// REST API for the dashboard.
-	srv := &http.Server{Addr: cfg.APIAddr, Handler: api.NewServer(st, log, userID, fitSvc)}
+	srv := &http.Server{Addr: cfg.APIAddr, Handler: api.NewServer(st, log, userID, fitSvc, sentSvc)}
 	go func() {
 		log.Info("api listening", "addr", cfg.APIAddr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
