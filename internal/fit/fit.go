@@ -42,14 +42,23 @@ func (s *Service) Score(ctx context.Context, resumeText, jdText string, postingI
 		return cached, true, nil
 	}
 
-	raw, err := s.llm.GenerateJSON(ctx, buildPrompt(jdText, resumeText))
-	if err != nil {
-		return nil, false, err
+	prompt := buildPrompt(jdText, resumeText)
+	// Generate, validating the shape before caching. Retry once if the model
+	// returns malformed JSON (a rare hiccup even with the schema + no-thinking config).
+	var raw json.RawMessage
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		raw, lastErr = s.llm.GenerateJSON(ctx, prompt, nil)
+		if lastErr != nil {
+			return nil, false, lastErr // API/config error — don't retry
+		}
+		var r Result
+		if lastErr = json.Unmarshal(raw, &r); lastErr == nil {
+			break
+		}
 	}
-	// Validate the model actually returned our shape before caching/serving.
-	var r Result
-	if err := json.Unmarshal(raw, &r); err != nil {
-		return nil, false, fmt.Errorf("model returned malformed JSON: %w", err)
+	if lastErr != nil {
+		return nil, false, fmt.Errorf("model returned malformed JSON: %w", lastErr)
 	}
 	if err := s.store.SaveFitScore(ctx, jdHash, resumeHash, postingID, s.llm.Model(), raw); err != nil {
 		return nil, false, err

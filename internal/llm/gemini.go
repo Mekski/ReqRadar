@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -30,18 +31,24 @@ func NewGemini(key, model string) *Gemini {
 func (g *Gemini) Model() string    { return g.model }
 func (g *Gemini) Configured() bool { return g.key != "" }
 
-func (g *Gemini) GenerateJSON(ctx context.Context, prompt string) ([]byte, error) {
+func (g *Gemini) GenerateJSON(ctx context.Context, prompt string, schema map[string]any) ([]byte, error) {
 	if g.key == "" {
 		return nil, ErrNotConfigured
 	}
+	genCfg := map[string]any{
+		"responseMimeType": "application/json",
+		"temperature":      0.2, // low: the rubric score should be stable across runs
+		"maxOutputTokens":  8192,
+		// 2.5 Flash spends "thinking" tokens from the output budget, which can
+		// truncate the JSON mid-structure; disable it for structured output.
+		"thinkingConfig": map[string]any{"thinkingBudget": 0},
+	}
+	if schema != nil {
+		genCfg["responseSchema"] = schema // constrains output to a valid shape
+	}
 	reqBody := map[string]any{
-		"contents": []any{
-			map[string]any{"parts": []any{map[string]any{"text": prompt}}},
-		},
-		"generationConfig": map[string]any{
-			"responseMimeType": "application/json",
-			"temperature":      0.2, // low: the rubric score should be stable across runs
-		},
+		"contents":         []any{map[string]any{"parts": []any{map[string]any{"text": prompt}}}},
+		"generationConfig": genCfg,
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -83,7 +90,24 @@ func (g *Gemini) GenerateJSON(ctx context.Context, prompt string) ([]byte, error
 		}
 		return nil, fmt.Errorf("gemini returned no content")
 	}
-	return []byte(out.Candidates[0].Content.Parts[0].Text), nil
+	var text string
+	for _, p := range out.Candidates[0].Content.Parts {
+		text += p.Text
+	}
+	return []byte(stripFences(text)), nil
+}
+
+// stripFences removes a ```json … ``` wrapper if the model added one despite the
+// JSON mime type, so the bytes parse cleanly.
+func stripFences(s string) string {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "```") {
+		return s
+	}
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(strings.TrimSpace(s), "```")
+	return strings.TrimSpace(s)
 }
 
 // GenerateGrounded runs the prompt with the google_search tool so the model

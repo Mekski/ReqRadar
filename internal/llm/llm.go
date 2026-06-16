@@ -24,8 +24,9 @@ type Source struct {
 // Client generates completions from a prompt. Implementations request JSON-only
 // output (GenerateJSON) or run a web-search-grounded generation (GenerateGrounded).
 type Client interface {
-	// GenerateJSON returns the model's raw JSON response for prompt.
-	GenerateJSON(ctx context.Context, prompt string) ([]byte, error)
+	// GenerateJSON returns the model's raw JSON response for prompt. schema is an
+	// optional response schema (nil to skip) that constrains the output shape.
+	GenerateJSON(ctx context.Context, prompt string, schema map[string]any) ([]byte, error)
 	// GenerateGrounded runs the prompt with web-search grounding, returning the
 	// generated text plus the real sources the model grounded on.
 	GenerateGrounded(ctx context.Context, prompt string) (string, []Source, error)
