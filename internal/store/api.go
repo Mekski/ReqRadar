@@ -165,6 +165,65 @@ func (s *Store) UpdateCompanyTier(ctx context.Context, entityID int64, tier stri
 	return err
 }
 
+// CompanyExpectedEstimate returns a company's stored expected-open estimate (the
+// curated or previously-researched fallback month), or "" if none. Used to skip a
+// redundant grounded search when an estimate already exists.
+func (s *Store) CompanyExpectedEstimate(ctx context.Context, entityID int64) (string, error) {
+	var est string
+	err := s.Pool.QueryRow(ctx,
+		`SELECT COALESCE(metadata->>'expected_estimate', '') FROM entities WHERE id = $1`, entityID).Scan(&est)
+	return est, err
+}
+
+// SetExpectedEstimate records a researched expected-open estimate (month or
+// "rolling") with its source. The WHERE guard only writes when no estimate exists
+// yet, so it can never overwrite a hand-curated value or a prior result — making
+// "research at most once, curated always wins" enforced in SQL.
+func (s *Store) SetExpectedEstimate(ctx context.Context, entityID int64, month, source, sourceURL string) error {
+	_, err := s.Pool.Exec(ctx,
+		`UPDATE entities
+		 SET metadata = COALESCE(metadata, '{}') || jsonb_build_object(
+		       'expected_estimate', $2::text,
+		       'expected_estimate_source', $3::text,
+		       'expected_estimate_url', $4::text)
+		 WHERE id = $1 AND kind = 'company'
+		   AND COALESCE(metadata->>'expected_estimate', '') = ''`,
+		entityID, month, source, sourceURL)
+	return err
+}
+
+// BlankEstimateCompanies returns watchlist companies (for userID) that have no
+// expected-open estimate yet — the backfill targets for the enrich-expected command.
+func (s *Store) BlankEstimateCompanies(ctx context.Context, userID int64) ([]struct {
+	ID   int64
+	Name string
+}, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT e.id, e.canonical_name
+		 FROM watchlist w JOIN entities e ON e.id = w.entity_id
+		 WHERE w.user_id = $1 AND COALESCE(e.metadata->>'expected_estimate', '') = ''
+		 ORDER BY e.canonical_name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct {
+		ID   int64
+		Name string
+	}
+	for rows.Next() {
+		var r struct {
+			ID   int64
+			Name string
+		}
+		if err := rows.Scan(&r.ID, &r.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 type FirehosePosting struct {
 	Company   string     `json:"company"`
 	Title     string     `json:"title"`
@@ -204,8 +263,10 @@ type CompanySummary struct {
 	Name         string `json:"name"`
 	Domain       string `json:"domain"`
 	Priority     string `json:"priority"`
-	ExpectedOpen string `json:"expected_open"`     // data-derived SWE seasonality peak month, e.g. "Aug" ("" if too few samples)
-	ExpectedEst  string `json:"expected_estimate"` // curated fallback month when data is sparse (the UI labels it "≈ est.")
+	ExpectedOpen   string `json:"expected_open"`             // data-derived SWE seasonality peak month, e.g. "Aug" ("" if too few samples)
+	ExpectedEst    string `json:"expected_estimate"`         // fallback month when data is sparse (the UI labels it "≈ est.")
+	ExpectedEstSrc string `json:"expected_estimate_source"`  // "" | "curated" | "llm" — provenance of the estimate
+	ExpectedEstURL string `json:"expected_estimate_url"`     // citation for an "llm"-researched estimate ("" otherwise)
 
 	// Posted pay of the company's most recent SWE-category internship (the card's
 	// pay figure). PayPeriod == "" means no SWE-intern pay is known yet.
@@ -219,7 +280,9 @@ var monthAbbr = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
 func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]CompanySummary, error) {
 	rows, err := s.Pool.Query(ctx,
 		`SELECT e.id, e.canonical_name, COALESCE(e.domain, ''), COALESCE(e.metadata->>'priority', ''),
-		        COALESCE(e.metadata->>'expected_estimate', '')
+		        COALESCE(e.metadata->>'expected_estimate', ''),
+		        COALESCE(e.metadata->>'expected_estimate_source', ''),
+		        COALESCE(e.metadata->>'expected_estimate_url', '')
 		 FROM watchlist w JOIN entities e ON e.id = w.entity_id
 		 WHERE w.user_id = $1
 		 ORDER BY e.canonical_name`, userID)
@@ -230,7 +293,7 @@ func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]Company
 	var out []CompanySummary
 	for rows.Next() {
 		var c CompanySummary
-		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.Priority, &c.ExpectedEst); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.Priority, &c.ExpectedEst, &c.ExpectedEstSrc, &c.ExpectedEstURL); err != nil {
 			return nil, err
 		}
 		out = append(out, c)

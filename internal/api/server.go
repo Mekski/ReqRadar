@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mekski/reqradar/internal/expected"
 	"github.com/Mekski/reqradar/internal/fit"
 	"github.com/Mekski/reqradar/internal/sentiment"
 	"github.com/Mekski/reqradar/internal/store"
@@ -47,6 +48,7 @@ type Server struct {
 	userID    int64
 	fit       *fit.Service
 	sentiment *sentiment.Service
+	expected  *expected.Service
 }
 
 // ServerConfig carries the cross-cutting HTTP concerns (auth + CORS) so they
@@ -56,8 +58,8 @@ type ServerConfig struct {
 	CORSOrigin string // Access-Control-Allow-Origin; "*" for local dev
 }
 
-func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service, sentSvc *sentiment.Service, cfg ServerConfig) http.Handler {
-	s := &Server{store: st, log: log, userID: userID, fit: fitSvc, sentiment: sentSvc}
+func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service, sentSvc *sentiment.Service, expSvc *expected.Service, cfg ServerConfig) http.Handler {
+	s := &Server{store: st, log: log, userID: userID, fit: fitSvc, sentiment: sentSvc, expected: expSvc}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
@@ -154,6 +156,23 @@ func (s *Server) addCompany(w http.ResponseWriter, r *http.Request) {
 		s.respond(w, nil, err)
 		return
 	}
+
+	// Fire-and-forget: research the expected-open month via grounded search so a
+	// freshly-added (history-less) company doesn't sit blank until a manual curated
+	// pass. Detached from the request (it outlives the response) and fully non-fatal
+	// — the add already succeeded; the estimate just populates within a few seconds.
+	// Skips when no API key is set or an estimate already exists.
+	if s.expected != nil && s.expected.Configured() {
+		name := in.Name
+		go func() {
+			bg, cancel := context.WithTimeout(context.Background(), llmCallTimeout)
+			defer cancel()
+			if err := s.expected.Research(bg, id, name); err != nil {
+				s.log.Warn("expected-open research failed", "company", name, "err", err)
+			}
+		}()
+	}
+
 	s.respond(w, map[string]int64{"id": id}, nil)
 }
 

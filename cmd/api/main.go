@@ -14,6 +14,7 @@ import (
 
 	"github.com/Mekski/reqradar/internal/api"
 	"github.com/Mekski/reqradar/internal/bus"
+	"github.com/Mekski/reqradar/internal/expected"
 	"github.com/Mekski/reqradar/internal/fit"
 	"github.com/Mekski/reqradar/internal/llm"
 	"github.com/Mekski/reqradar/internal/sentiment"
@@ -83,13 +84,14 @@ func main() {
 	gemini := llm.NewGemini(cfg.GeminiKey, cfg.GeminiModel)
 	fitSvc := fit.New(gemini, st)
 	sentSvc := sentiment.New(gemini, st)
+	expSvc := expected.New(gemini, st)
 
 	// REST API for the dashboard. Timeouts guard against slow/abandoned clients
 	// once this is internet-reachable; WriteTimeout sits above the LLM call budget
 	// so on-demand fit/sentiment responses aren't cut off mid-flight.
 	srv := &http.Server{
 		Addr:              cfg.APIAddr,
-		Handler: api.NewServer(st, log, userID, fitSvc, sentSvc, api.ServerConfig{
+		Handler: api.NewServer(st, log, userID, fitSvc, sentSvc, expSvc, api.ServerConfig{
 			APIToken: cfg.APIToken, CORSOrigin: cfg.CORSOrigin,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

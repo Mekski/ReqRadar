@@ -10,7 +10,9 @@ export type Company = {
   domain: string;
   priority: string;
   expected_open: string; // data-derived SWE peak month, e.g. "Aug" ("" if too few samples)
-  expected_estimate: string; // curated fallback month when data is sparse ("" if none)
+  expected_estimate: string; // fallback month when data is sparse ("" if none)
+  expected_estimate_source: string; // "" | "curated" | "llm" — where the estimate came from
+  expected_estimate_url: string; // citation for an "llm"-researched estimate ("" otherwise)
   pay_min: number; // posted pay of the latest SWE-category intern (0 when unknown)
   pay_max: number;
   pay_period: string; // "hourly" | "annual" | "monthly"; "" when no SWE-intern pay known

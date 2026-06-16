@@ -50,6 +50,11 @@ backfill:
 firehose-prime:
 	go run ./cmd/firehose-prime
 
+# Research expected-open estimates (grounded search) for watchlist companies that
+# have none yet. Needs GEMINI_API_KEY. New companies get this automatically on add.
+enrich-expected:
+	go run ./cmd/enrich-expected
+
 build:
 	go build ./...
 

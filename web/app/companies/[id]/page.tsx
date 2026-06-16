@@ -75,12 +75,41 @@ export default async function CompanyPage({
             ))}
           </div>
         </div>
-        <p className="mt-3 font-mono text-3xl font-bold text-accent">{window ?? "—"}</p>
-        <p className="mb-6 mt-1 font-mono text-[11px] text-dim">
-          {window
-            ? `${FILTERS.find((f) => f.key === filter)?.label} roles · each bar = a calendar month, all years combined`
-            : "no history for this role type yet — try “all roles”, or run a backfill"}
-        </p>
+        {window ? (
+          <>
+            <p className="mt-3 font-mono text-3xl font-bold text-accent">{window}</p>
+            <p className="mb-6 mt-1 font-mono text-[11px] text-dim">
+              {FILTERS.find((f) => f.key === filter)?.label} roles · each bar = a calendar month, all years combined
+            </p>
+          </>
+        ) : company.expected_estimate ? (
+          <>
+            <p className="mt-3 font-mono text-3xl font-bold text-accent/80">
+              {company.expected_estimate === "rolling" ? "rolling" : company.expected_estimate}
+              {company.expected_estimate !== "rolling" && (
+                <span className="ml-2 align-middle font-mono text-xs text-dim">≈ est.</span>
+              )}
+            </p>
+            <p className="mb-6 mt-1 font-mono text-[11px] text-dim">
+              not enough posting history yet — {company.expected_estimate_source === "llm" ? "estimated via web search" : "curated estimate"}
+              {company.expected_estimate_url && (
+                <>
+                  {" · "}
+                  <a href={company.expected_estimate_url} target="_blank" rel="noopener noreferrer" className="text-muted underline hover:text-accent">
+                    source
+                  </a>
+                </>
+              )}
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-3 font-mono text-3xl font-bold text-accent">—</p>
+            <p className="mb-6 mt-1 font-mono text-[11px] text-dim">
+              no history for this role type yet — try “all roles”, or run a backfill
+            </p>
+          </>
+        )}
         <Seasonality season={season} />
       </section>
 
