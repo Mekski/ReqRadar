@@ -23,7 +23,7 @@ collectors ──signals.raw.*──▶ processor ──events.*──▶ api �
 (poll + git backfill)   (normalize → resolve → dedupe → Postgres)   (REST + alert dispatcher)
 ```
 
-- **collector** — a plugin framework; sources fetch/stamp/hash only (SimplifyJobs listings + git-history backfill today; Greenhouse/Ashby/HN planned).
+- **collector** — a plugin framework; sources fetch/stamp/hash only (SimplifyJobs listings + git-history backfill, Greenhouse, and Ashby today; HN planned).
 - **processor** — normalize → entity-resolution cascade → dedupe/diff → Postgres → emit `events.*`. Idempotent; safe to replay.
 - **api** — REST for the dashboard + the Telegram alert dispatcher (records `detect_to_alert_ms`; recency-gated so backfills never flood).
 
@@ -49,7 +49,7 @@ cd web && npm install && npm run dev   # dashboard at http://localhost:3000
 
 ## Status
 
-The pipeline, backfill, watchlist + firehose alerts, and the dashboard all work end-to-end (verified on a live stack, CI green). In progress: confidence-gated "expected open" with an LLM-estimate fallback for sparse companies, the Greenhouse/Ashby/HN collectors (which also unlock posted pay ranges), and a free cloud deployment.
+End-to-end and verified on a live stack (CI green): the collector → NATS → processor → Postgres pipeline, ~3 years of backfilled timing, watchlist + firehose Telegram alerts, three collectors (SimplifyJobs + git-history backfill, Greenhouse, Ashby), posted-pay extraction from ATS JDs, "expected open" SWE-intern seasonality across 30 companies, and a Next.js dashboard. Two on-demand LLM features run on a free-tier model: **fit score** (resume ↔ JD, rubric-calibrated) and a **grounded-search company sentiment** card. Remaining: a free always-on deployment so alerts run 24/7, plus the HN collector.
 
 ## Docs
 
