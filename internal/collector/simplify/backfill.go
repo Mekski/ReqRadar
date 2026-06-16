@@ -57,7 +57,9 @@ func (c *Collector) Backfill(ctx context.Context, from, to time.Time, emit func(
 				continue
 			}
 			seen[l.ID] = true
-			if err := emit(toSignal(c.Name(), l, now)); err != nil {
+			sig := toSignal(c.Name(), l, now)
+			sig.Backfill = true // historical replay — processor skips the firehose for these
+			if err := emit(sig); err != nil {
 				return fmt.Errorf("emit: %w", err)
 			}
 			emitted++

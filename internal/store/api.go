@@ -66,11 +66,11 @@ func (s *Store) AllUserChatIDs(ctx context.Context) ([]string, error) {
 // MarkFirehoseSeen records a firehose posting and returns true if it was new
 // (not previously seen). The insert-or-ignore makes "is this new?" a single
 // atomic op.
-func (s *Store) MarkFirehoseSeen(ctx context.Context, source, externalID, company, title, url, category string) (bool, error) {
+func (s *Store) MarkFirehoseSeen(ctx context.Context, source, externalID, company, title, url, category string, eventTime time.Time) (bool, error) {
 	tag, err := s.Pool.Exec(ctx,
-		`INSERT INTO firehose_seen (source, external_id, company, title, url, category)
-		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (source, external_id) DO NOTHING`,
-		source, externalID, company, title, url, category)
+		`INSERT INTO firehose_seen (source, external_id, company, title, url, category, event_time)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (source, external_id) DO NOTHING`,
+		source, externalID, company, title, url, category, eventTime)
 	if err != nil {
 		return false, err
 	}
@@ -160,18 +160,22 @@ func (s *Store) UpdateCompanyTier(ctx context.Context, entityID int64, tier stri
 }
 
 type FirehosePosting struct {
-	Company   string    `json:"company"`
-	Title     string    `json:"title"`
-	URL       string    `json:"url"`
-	Category  string    `json:"category"`
-	FirstSeen time.Time `json:"first_seen"`
+	Company   string     `json:"company"`
+	Title     string     `json:"title"`
+	URL       string     `json:"url"`
+	Category  string     `json:"category"`
+	EventTime *time.Time `json:"event_time"` // the job's posting date (null for legacy rows)
+	FirstSeen time.Time  `json:"first_seen"`
 }
 
-// RecentFirehose returns the most recently seen non-watchlist postings.
+// RecentFirehose returns the most recently *posted* non-watchlist internships
+// (ordered by the job's own date, not when we recorded it — so a backfill or a
+// re-prime can't make stale postings look new). Rows without a known posting date
+// sort last.
 func (s *Store) RecentFirehose(ctx context.Context, limit int) ([]FirehosePosting, error) {
 	rows, err := s.Pool.Query(ctx,
-		`SELECT company, title, COALESCE(url, ''), COALESCE(category, ''), first_seen
-		 FROM firehose_seen ORDER BY first_seen DESC LIMIT $1`, limit)
+		`SELECT company, title, COALESCE(url, ''), COALESCE(category, ''), event_time, first_seen
+		 FROM firehose_seen ORDER BY event_time DESC NULLS LAST, first_seen DESC LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +183,7 @@ func (s *Store) RecentFirehose(ctx context.Context, limit int) ([]FirehosePostin
 	var out []FirehosePosting
 	for rows.Next() {
 		var f FirehosePosting
-		if err := rows.Scan(&f.Company, &f.Title, &f.URL, &f.Category, &f.FirstSeen); err != nil {
+		if err := rows.Scan(&f.Company, &f.Title, &f.URL, &f.Category, &f.EventTime, &f.FirstSeen); err != nil {
 			return nil, err
 		}
 		out = append(out, f)

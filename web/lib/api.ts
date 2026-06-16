@@ -40,6 +40,7 @@ export type FirehosePosting = {
   title: string;
   url: string;
   category: string;
+  event_time: string | null; // the job's posting date (null for legacy rows)
   first_seen: string;
 };
 

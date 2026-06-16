@@ -16,7 +16,12 @@ export default async function FirehosePage() {
     <div>
       <div className="mb-6">
         <h1 className="font-mono text-xl font-bold tracking-tight text-ink">firehose</h1>
-        <p className="mt-1 font-mono text-xs text-dim">new SWE / AI-ML internships beyond your watchlist</p>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          An early-warning feed of newly-posted SWE / AI-ML internships at companies{" "}
+          <span className="text-ink">not</span> on your watchlist — so a great role somewhere unexpected
+          doesn&apos;t slip by. Watchlist companies get richer tracking + alerts on the{" "}
+          <span className="text-accent">watchlist</span> tab; this is everything else, newest first.
+        </p>
       </div>
 
       <div className="panel overflow-hidden rounded-xl">
@@ -41,7 +46,7 @@ export default async function FirehosePage() {
               </div>
               <div className="shrink-0 text-right font-mono text-[11px] text-dim">
                 <div className="text-accent/70">{f.category}</div>
-                <div>{new Date(f.first_seen).toLocaleDateString()}</div>
+                <div>{f.event_time ? `posted ${new Date(f.event_time).toLocaleDateString()}` : "—"}</div>
               </div>
             </li>
           ))}

@@ -1,6 +1,9 @@
 package store
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // This file holds the transactional-outbox queries (alert-loss-trio H1/H2) plus
 // a transaction-aware variant of MarkFirehoseSeen. The pool-based MarkFirehoseSeen
@@ -58,11 +61,11 @@ func (s *Store) UnpublishedOutbox(ctx context.Context, limit int) ([]OutboxRow, 
 // records a firehose posting and returns true if it was new. Running it on the
 // same tx as InsertOutbox makes "seen" and "will be published" commit together,
 // closing the H1 drop-on-publish-failure gap.
-func (s *Store) MarkFirehoseSeenTx(ctx context.Context, q DBTX, source, externalID, company, title, url, category string) (bool, error) {
+func (s *Store) MarkFirehoseSeenTx(ctx context.Context, q DBTX, source, externalID, company, title, url, category string, eventTime time.Time) (bool, error) {
 	tag, err := q.Exec(ctx,
-		`INSERT INTO firehose_seen (source, external_id, company, title, url, category)
-		 VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (source, external_id) DO NOTHING`,
-		source, externalID, company, title, url, category)
+		`INSERT INTO firehose_seen (source, external_id, company, title, url, category, event_time)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (source, external_id) DO NOTHING`,
+		source, externalID, company, title, url, category, eventTime)
 	if err != nil {
 		return false, err
 	}

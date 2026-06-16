@@ -4,6 +4,14 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Fix — firehose polluted by backfill (showed dead 404s) + UX
+The firehose feed's top entries were all 404s. Root cause: `maybeFirehose` recorded *any* non-watchlist SWE/AI-ML posting with no recency gate, so `make backfill` replayed ~16k historical (long-closed) postings into `firehose_seen` with `first_seen = now`; the page sorted by `first_seen`, so dead 2023–25 postings looked "new".
+- **Stop it at the source:** new `RawSignal.Backfill` flag (set by the simplify Backfiller). The processor still stores watchlist timing from backfill but **skips the firehose** for it — the firehose is a live "what's new" feed, not history.
+- **Real dates:** migration `000010` adds `event_time` (the job's `date_posted`) to `firehose_seen`; `MarkFirehoseSeen`/`Tx` + `firehose-prime` populate it; `RecentFirehose` sorts by `event_time DESC NULLS LAST` (not record-time). The feed now reads as genuinely "newest-posted first" with live URLs.
+- **UX:** the firehose page got a real explainer ("early-warning feed of newly-posted SWE/AI-ML internships at companies NOT on your watchlist") and shows "posted <date>" per row.
+- **Cleanup:** truncated the 16k polluted rows + re-primed (792 current postings, verified live URLs). Caveat documented: old flagless backfill signals still in NATS would re-pollute on a manual replay within the 35-day window (they age out; `raw_signals` is watchlist-only so a Postgres replay is clean).
+- **Telegram note:** the firehose alert path works (48h freshness gate suppressed the backfilled ones correctly — no flood); it's quiet because the collector isn't running continuously in dev (it's a persistent daemon, not a cron job — always-on is the deferred VM deploy).
+
 ### Fix — close the dispatcher last-hop alert drop (over-engineering audit §1b)
 The transactional outbox guarantees an event survives processor→NATS, but the dispatcher then *swallowed* Telegram send failures and Ack'd anyway — dropping the alert at the last hop and partly negating H1/H2 (the weak link the over-engineering audit rightly flagged). `handleWatchlist`/`handleFirehose` (`internal/api/dispatcher.go`) now **return** the send error, so the events consumer Nak's and redelivers under the `MaxDeliver(5)`/`BackOff` caps added in H3 (terminated + logged after 5 attempts, never hot-looping). A retried alert records a larger, honest `detect_to_alert_ms`. Right-sized for single-user — no multi-user dedup machinery added (noted as a future step in [issues/audit-findings.md](issues/audit-findings.md), OE-§1b). Commit `05a015a`.
 

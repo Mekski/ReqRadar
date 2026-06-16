@@ -87,7 +87,7 @@ func main() {
 		if _, watchlisted := aliases[entity.Normalize(l.Company)]; watchlisted {
 			continue // watchlist companies are handled by the rich path
 		}
-		if _, err := st.MarkFirehoseSeen(ctx, sig.Source, sig.ExternalID, l.Company, l.Title, l.URL, l.Category); err != nil {
+		if _, err := st.MarkFirehoseSeen(ctx, sig.Source, sig.ExternalID, l.Company, l.Title, l.URL, l.Category, sig.EventTime); err != nil {
 			log.Error("mark seen", "id", sig.ExternalID, "err", err)
 		}
 		primed++

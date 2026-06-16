@@ -33,6 +33,12 @@ type RawSignal struct {
 	ObservedAt  time.Time       `json:"observed_at"`
 	Payload     json.RawMessage `json:"payload"`
 	ContentHash string          `json:"content_hash"`
+
+	// Backfill marks a signal reconstructed from history (not a live poll). The
+	// processor still stores watchlist postings/timing from it, but skips the
+	// firehose — that's a live "what's new" feed, and replaying years of history
+	// into it would fill it with long-dead (404) postings.
+	Backfill bool `json:"backfill,omitempty"`
 }
 
 // Event is the envelope the processor publishes to events.<type> after a signal

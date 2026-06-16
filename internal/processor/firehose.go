@@ -40,7 +40,7 @@ func (p *Processor) maybeFirehose(ctx context.Context, raw signal.RawSignal, pos
 	}
 	defer tx.Rollback(ctx)
 
-	isNew, err := p.store.MarkFirehoseSeenTx(ctx, tx, raw.Source, raw.ExternalID, post.Company, post.Title, post.URL, post.Category)
+	isNew, err := p.store.MarkFirehoseSeenTx(ctx, tx, raw.Source, raw.ExternalID, post.Company, post.Title, post.URL, post.Category, raw.EventTime)
 	if err != nil {
 		return err
 	}

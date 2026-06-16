@@ -92,6 +92,9 @@ func (p *Processor) Handle(ctx context.Context, raw signal.RawSignal) error {
 	entityID, method, resolved := p.resolver.Resolve(post.Company, post.URL)
 	p.recordDecision(ctx, post.Company, entityID, method, resolved)
 	if !resolved {
+		if raw.Backfill {
+			return nil // historical non-watchlist posting — not part of the live firehose feed
+		}
 		// Not a watchlist company — route to the firehose (broad alerts).
 		return p.maybeFirehose(ctx, raw, post)
 	}
