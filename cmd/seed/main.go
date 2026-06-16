@@ -81,27 +81,32 @@ func main() {
 
 	userID := upsertUser(ctx, tx, sf.User.Name, chatID)
 
-	atsOrgs := map[string][]string{} // platform -> slugs, derived from companies
+	atsPlatforms := map[string]bool{} // platforms in use, to enable their collectors
 	for _, c := range sf.Companies {
 		aliases := append([]string{}, c.Aliases...)
-		if c.ATS != nil {
-			aliases = append(aliases, c.ATS.Slug)
-		}
-		if _, err := st.UpsertCompany(ctx, tx, userID, store.CompanyInput{
+		in := store.CompanyInput{
 			Name: c.CanonicalName, Domain: c.Domain, Priority: c.Priority, Source: "seed",
 			Aliases: aliases, ExpectedEstimate: c.ExpectedEstimate,
-		}); err != nil {
-			log.Fatalf("upsert company %s: %v", c.CanonicalName, err)
 		}
 		if c.ATS != nil {
-			atsOrgs[c.ATS.Platform] = append(atsOrgs[c.ATS.Platform], c.ATS.Slug)
+			aliases = append(aliases, c.ATS.Slug)
+			in.Aliases = aliases
+			// Store the board on the entity — the single source of truth the ATS
+			// collectors read each poll cycle (entities.metadata.ats). Runtime
+			// discovery writes the same field, so seed + discovery never diverge.
+			in.ATSPlatform, in.ATSSlug = c.ATS.Platform, c.ATS.Slug
+			atsPlatforms[c.ATS.Platform] = true
+		}
+		if _, err := st.UpsertCompany(ctx, tx, userID, in); err != nil {
+			log.Fatalf("upsert company %s: %v", c.CanonicalName, err)
 		}
 	}
 
-	for platform, slugs := range atsOrgs {
+	// Enable each ATS platform's collector. The poll-list is NOT in this config —
+	// the collectors read it from entities.metadata.ats — so config stays empty.
+	for platform := range atsPlatforms {
 		upsertSource(ctx, tx, source{
-			Name: platform, Kind: "ats", Enabled: true,
-			Config: map[string]any{"orgs": slugs},
+			Name: platform, Kind: "ats", Enabled: true, Config: map[string]any{},
 		})
 	}
 	for _, s := range sf.Sources {
@@ -112,7 +117,7 @@ func main() {
 		log.Fatalf("commit: %v", err)
 	}
 	log.Printf("seeded: %d companies, %d ATS platforms, %d static sources",
-		len(sf.Companies), len(atsOrgs), len(sf.Sources))
+		len(sf.Companies), len(atsPlatforms), len(sf.Sources))
 }
 
 func upsertUser(ctx context.Context, tx pgx.Tx, name, chatID string) int64 {

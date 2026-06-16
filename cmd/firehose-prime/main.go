@@ -49,7 +49,7 @@ func main() {
 		return
 	}
 
-	c, err := simplify.New(simplifyCfg, log)
+	c, err := simplify.New(simplifyCfg, st, log)
 	if err != nil {
 		log.Error("simplify init", "err", err)
 		return

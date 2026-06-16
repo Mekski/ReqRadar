@@ -28,31 +28,25 @@ import (
 
 	"github.com/Mekski/reqradar/internal/collector"
 	"github.com/Mekski/reqradar/internal/signal"
+	"github.com/Mekski/reqradar/internal/store"
 )
-
-type config struct {
-	Orgs []string `json:"orgs"`
-}
 
 type Collector struct {
 	client *http.Client
-	orgs   []string
+	// orgsFn returns the board slugs to poll, read from the watchlist
+	// (entities.metadata.ats) each cycle so a runtime-discovered slug is picked up
+	// next poll with no restart. Injectable for testing.
+	orgsFn func(context.Context) ([]string, error)
 	etags  map[string]string // per-org conditional-GET state; a restart re-fetches once
 	log    *slog.Logger
 }
 
-// New is the collector.Factory for ashby.
-func New(raw json.RawMessage, log *slog.Logger) (collector.Collector, error) {
-	var cfg config
-	if err := json.Unmarshal(raw, &cfg); err != nil {
-		return nil, fmt.Errorf("parse config: %w", err)
-	}
-	if len(cfg.Orgs) == 0 {
-		return nil, fmt.Errorf("at least one org is required")
-	}
+// New is the collector.Factory for ashby. The poll-list comes from the watchlist
+// via the store each cycle, not the static config.
+func New(_ json.RawMessage, st *store.Store, log *slog.Logger) (collector.Collector, error) {
 	return &Collector{
 		client: &http.Client{Timeout: 30 * time.Second},
-		orgs:   cfg.Orgs,
+		orgsFn: func(ctx context.Context) ([]string, error) { return st.ATSOrgs(ctx, "ashby") },
 		etags:  map[string]string{},
 		log:    log,
 	}, nil
@@ -100,12 +94,16 @@ func isInternship(j job) bool {
 }
 
 func (c *Collector) Collect(ctx context.Context, _ time.Time) ([]signal.RawSignal, error) {
+	orgs, err := c.orgsFn(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load ashby orgs: %w", err)
+	}
 	now := time.Now()
 	var signals []signal.RawSignal
 	var firstErr error
 	ok := 0
 
-	for _, org := range c.orgs {
+	for _, org := range orgs {
 		jobs, notModified, err := c.fetchBoard(ctx, org)
 		if err != nil {
 			c.log.Error("fetch board", "org", org, "err", err)

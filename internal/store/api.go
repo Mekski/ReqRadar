@@ -88,6 +88,8 @@ type CompanyInput struct {
 	Source           string   // 'seed' | 'manual'
 	Aliases          []string // raw; normalized + canonical-name-added inside UpsertCompany
 	ExpectedEstimate string   // curated summer-SWE open month, e.g. "Sep" (seed only; blank for manual adds)
+	ATSPlatform      string   // "greenhouse" | "ashby" | "" — which board to poll for this company
+	ATSSlug          string   // the board slug on that platform
 }
 
 // UpsertCompany creates or updates a company entity, its aliases, and the
@@ -108,6 +110,9 @@ func (s *Store) UpsertCompany(ctx context.Context, q DBTX, userID int64, in Comp
 	}
 	if in.ExpectedEstimate != "" {
 		metaMap["expected_estimate"] = in.ExpectedEstimate
+	}
+	if in.ATSPlatform != "" && in.ATSSlug != "" {
+		metaMap["ats"] = map[string]any{"platform": in.ATSPlatform, "slug": in.ATSSlug}
 	}
 	meta, _ := json.Marshal(metaMap)
 	var entityID int64
@@ -190,6 +195,85 @@ func (s *Store) SetExpectedEstimate(ctx context.Context, entityID int64, month, 
 		   AND COALESCE(metadata->>'expected_estimate', '') = ''`,
 		entityID, month, source, sourceURL)
 	return err
+}
+
+// ---- ATS board discovery (which Greenhouse/Ashby board to poll per company) ----
+
+// ATSOrgs returns the board slugs to poll for a platform ("greenhouse"|"ashby"),
+// read from each company's metadata.ats. The ATS collectors call this at the start
+// of every poll cycle, so a slug discovered/added at runtime is picked up on the
+// next poll — no reseed or restart (mirrors the processor's resolver hot-reload).
+func (s *Store) ATSOrgs(ctx context.Context, platform string) ([]string, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT metadata->'ats'->>'slug'
+		 FROM entities
+		 WHERE kind = 'company'
+		   AND metadata->'ats'->>'platform' = $1
+		   AND COALESCE(metadata->'ats'->>'slug', '') <> ''`, platform)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		out = append(out, slug)
+	}
+	return out, rows.Err()
+}
+
+// EntityATS returns a company's stored ATS platform + slug (or ""/"" if none).
+func (s *Store) EntityATS(ctx context.Context, entityID int64) (platform, slug string, err error) {
+	err = s.Pool.QueryRow(ctx,
+		`SELECT COALESCE(metadata->'ats'->>'platform', ''), COALESCE(metadata->'ats'->>'slug', '')
+		 FROM entities WHERE id = $1`, entityID).Scan(&platform, &slug)
+	return platform, slug, err
+}
+
+// SetEntityATS records a company's discovered (and verified) ATS board, merging
+// into metadata so other keys are preserved.
+func (s *Store) SetEntityATS(ctx context.Context, entityID int64, platform, slug string) error {
+	_, err := s.Pool.Exec(ctx,
+		`UPDATE entities
+		 SET metadata = COALESCE(metadata, '{}') || jsonb_build_object(
+		       'ats', jsonb_build_object('platform', $2::text, 'slug', $3::text))
+		 WHERE id = $1 AND kind = 'company'`, entityID, platform, slug)
+	return err
+}
+
+// WatchlistEntitiesWithoutATS returns watchlist companies (for userID) that have no
+// ATS board recorded — the targets for the discover-ats backfill command.
+func (s *Store) WatchlistEntitiesWithoutATS(ctx context.Context, userID int64) ([]struct {
+	ID   int64
+	Name string
+}, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT e.id, e.canonical_name
+		 FROM watchlist w JOIN entities e ON e.id = w.entity_id
+		 WHERE w.user_id = $1 AND COALESCE(e.metadata->'ats'->>'slug', '') = ''
+		 ORDER BY e.canonical_name`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []struct {
+		ID   int64
+		Name string
+	}
+	for rows.Next() {
+		var r struct {
+			ID   int64
+			Name string
+		}
+		if err := rows.Scan(&r.ID, &r.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // BlankEstimateCompanies returns watchlist companies (for userID) that have no

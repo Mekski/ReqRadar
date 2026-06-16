@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/Mekski/reqradar/internal/api"
+	"github.com/Mekski/reqradar/internal/ats"
 	"github.com/Mekski/reqradar/internal/bus"
 	"github.com/Mekski/reqradar/internal/expected"
 	"github.com/Mekski/reqradar/internal/fit"
@@ -85,13 +86,14 @@ func main() {
 	fitSvc := fit.New(gemini, st)
 	sentSvc := sentiment.New(gemini, st)
 	expSvc := expected.New(gemini, st)
+	atsSvc := ats.New(gemini, st)
 
 	// REST API for the dashboard. Timeouts guard against slow/abandoned clients
 	// once this is internet-reachable; WriteTimeout sits above the LLM call budget
 	// so on-demand fit/sentiment responses aren't cut off mid-flight.
 	srv := &http.Server{
 		Addr:              cfg.APIAddr,
-		Handler: api.NewServer(st, log, userID, fitSvc, sentSvc, expSvc, api.ServerConfig{
+		Handler: api.NewServer(st, log, userID, fitSvc, sentSvc, expSvc, atsSvc, api.ServerConfig{
 			APIToken: cfg.APIToken, CORSOrigin: cfg.CORSOrigin,
 		}),
 		ReadHeaderTimeout: 5 * time.Second,

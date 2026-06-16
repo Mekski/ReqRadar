@@ -14,8 +14,11 @@ import (
 
 // Factory builds a collector from its source-row config. Registering factories
 // (not instances) lets the DB sources table drive which collectors exist and how
-// they're configured. See DESIGN.md §3.1.
-type Factory func(cfg json.RawMessage, log *slog.Logger) (Collector, error)
+// they're configured. The store is passed so a collector can read live operational
+// config from the DB (e.g. the ATS collectors read which board slugs to poll from
+// the watchlist each cycle); aggregators that don't need it just ignore it.
+// See DESIGN.md §3.1.
+type Factory func(cfg json.RawMessage, st *store.Store, log *slog.Logger) (Collector, error)
 
 // Runner schedules registered collectors against the enabled sources in the DB.
 type Runner struct {
@@ -46,7 +49,7 @@ func (r *Runner) Run(ctx context.Context) error {
 			r.log.Warn("enabled source has no collector registered yet", "source", s.Name)
 			continue
 		}
-		c, err := f(s.Config, r.log.With("collector", s.Name))
+		c, err := f(s.Config, r.store, r.log.With("collector", s.Name))
 		if err != nil {
 			r.log.Error("collector init failed", "source", s.Name, "err", err)
 			continue

@@ -22,6 +22,7 @@ import (
 
 	"github.com/Mekski/reqradar/internal/collector"
 	"github.com/Mekski/reqradar/internal/signal"
+	"github.com/Mekski/reqradar/internal/store"
 )
 
 type config struct {
@@ -40,8 +41,10 @@ type Collector struct {
 	log          *slog.Logger
 }
 
-// New is the collector.Factory for simplify-listings.
-func New(raw json.RawMessage, log *slog.Logger) (collector.Collector, error) {
+// New is the collector.Factory for simplify-listings. The store arg is unused
+// (this aggregator's config is fully static) — it's part of the shared Factory
+// signature.
+func New(raw json.RawMessage, _ *store.Store, log *slog.Logger) (collector.Collector, error) {
 	var cfg config
 	if err := json.Unmarshal(raw, &cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)

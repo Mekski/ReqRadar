@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Mekski/reqradar/internal/ats"
 	"github.com/Mekski/reqradar/internal/expected"
 	"github.com/Mekski/reqradar/internal/fit"
 	"github.com/Mekski/reqradar/internal/sentiment"
@@ -49,6 +50,7 @@ type Server struct {
 	fit       *fit.Service
 	sentiment *sentiment.Service
 	expected  *expected.Service
+	ats       *ats.Service
 }
 
 // ServerConfig carries the cross-cutting HTTP concerns (auth + CORS) so they
@@ -58,8 +60,8 @@ type ServerConfig struct {
 	CORSOrigin string // Access-Control-Allow-Origin; "*" for local dev
 }
 
-func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service, sentSvc *sentiment.Service, expSvc *expected.Service, cfg ServerConfig) http.Handler {
-	s := &Server{store: st, log: log, userID: userID, fit: fitSvc, sentiment: sentSvc, expected: expSvc}
+func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service, sentSvc *sentiment.Service, expSvc *expected.Service, atsSvc *ats.Service, cfg ServerConfig) http.Handler {
+	s := &Server{store: st, log: log, userID: userID, fit: fitSvc, sentiment: sentSvc, expected: expSvc, ats: atsSvc}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
@@ -169,6 +171,20 @@ func (s *Server) addCompany(w http.ResponseWriter, r *http.Request) {
 			defer cancel()
 			if err := s.expected.Research(bg, id, name); err != nil {
 				s.log.Warn("expected-open research failed", "company", name, "err", err)
+			}
+		}()
+	}
+
+	// Likewise discover which ATS board (Greenhouse/Ashby) the company uses, so its
+	// postings get the rich pipeline (pay + JD) without a manual slug lookup. The
+	// verified slug is read by the ATS collectors on their next poll.
+	if s.ats != nil && s.ats.Configured() {
+		name := in.Name
+		go func() {
+			bg, cancel := context.WithTimeout(context.Background(), llmCallTimeout)
+			defer cancel()
+			if err := s.ats.Discover(bg, id, name); err != nil {
+				s.log.Warn("ats discovery failed", "company", name, "err", err)
 			}
 		}()
 	}

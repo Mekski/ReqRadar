@@ -55,6 +55,12 @@ firehose-prime:
 enrich-expected:
 	go run ./cmd/enrich-expected
 
+# Discover the ATS board (Greenhouse/Ashby slug) for watchlist companies that have
+# none yet (grounded search + live verify). Needs GEMINI_API_KEY. New companies get
+# this automatically on add; collectors pick up new slugs on their next poll.
+discover-ats:
+	go run ./cmd/discover-ats
+
 build:
 	go build ./...
 

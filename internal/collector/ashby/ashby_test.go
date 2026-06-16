@@ -141,7 +141,7 @@ func newTestCollector(t *testing.T, server *httptest.Server, orgs ...string) *Co
 	}
 	return &Collector{
 		client: &http.Client{Transport: rewriteTransport{base}},
-		orgs:   orgs,
+		orgsFn: func(context.Context) ([]string, error) { return orgs, nil },
 		etags:  map[string]string{},
 		log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
