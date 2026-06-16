@@ -50,6 +50,14 @@ find no housing-stipend information, say so explicitly — do not guess.
 ## Return offers & conversion
 What people say about intern → return-offer rates and full-time conversion.
 
+## Early-talent programs & ways in
+Specific programs or paths toward an internship or direct consideration — e.g.
+student / early-talent or "insider"/ambassador programs, diversity & inclusion
+pipelines, hackathons or coding challenges the company runs, info sessions / campus
+recruiting, and referral routes. For each, give the **program name**, what it is in a
+few words, who it's for, and **timing/deadlines** if found. List only real, sourced
+programs; if you find none, write "_Not enough public information found._"
+
 ## Watch-outs
 Common complaints or red flags, if any.
 

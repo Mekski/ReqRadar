@@ -36,7 +36,7 @@ export function SentimentCard({ companyId }: { companyId: number }) {
     <section className="panel rounded-xl p-6">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h2 className="font-mono text-[11px] uppercase tracking-widest text-accent">community sentiment</h2>
+          <h2 className="font-mono text-[11px] uppercase tracking-widest text-accent">community sentiment &amp; ways in</h2>
           <span className="accent-bar mt-2 block" />
         </div>
         <button
@@ -65,7 +65,8 @@ export function SentimentCard({ companyId }: { companyId: number }) {
       {!report && !busy && configured && (
         <p className="mt-4 text-sm text-muted">
           What does the developer community say about interning here — prestige, culture, the interview
-          process (OA, rounds), intern pay &amp; housing? Click <span className="text-accent">generate</span> to
+          process (OA, rounds), intern pay &amp; housing — and what are the <span className="text-ink">ways in</span>{" "}
+          (early-talent programs, hackathons, referral routes)? Click <span className="text-accent">generate</span> to
           research it live. Grounded in public sources; says so honestly when something can&apos;t be found.
         </p>
       )}
