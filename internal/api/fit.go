@@ -3,41 +3,32 @@ package api
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
+	"strings"
 
-	"github.com/Mekski/reqradar/internal/fit"
 	"github.com/Mekski/reqradar/internal/llm"
 )
 
-const maxResumeBytes = 10 << 20 // 10 MB
-
-// uploadResume accepts a multipart PDF (field "resume"), extracts its text, and
-// stores it for the user.
+// uploadResume stores resume text. The PDF is parsed in the browser (pdf.js, which
+// handles LaTeX/Overleaf spacing far better than a Go extractor), so this just
+// takes the extracted text.
 func (s *Server) uploadResume(w http.ResponseWriter, r *http.Request) {
-	if err := r.ParseMultipartForm(maxResumeBytes); err != nil {
-		http.Error(w, "invalid upload", http.StatusBadRequest)
+	var in struct {
+		Filename string `json:"filename"`
+		Text     string `json:"text"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
 		return
 	}
-	file, header, err := r.FormFile("resume")
-	if err != nil {
-		http.Error(w, "missing 'resume' file", http.StatusBadRequest)
+	if len(strings.TrimSpace(in.Text)) < 50 {
+		http.Error(w, "resume text too short — is this a scanned/image PDF?", http.StatusUnprocessableEntity)
 		return
 	}
-	defer file.Close()
-
-	data, err := io.ReadAll(io.LimitReader(file, maxResumeBytes))
-	if err != nil {
-		s.respond(w, nil, err)
-		return
+	if in.Filename == "" {
+		in.Filename = "resume.pdf"
 	}
-	text, err := fit.ExtractText(data)
-	if err != nil {
-		// Extraction failures are user-fixable (e.g. a scanned PDF) — 422, not 500.
-		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
-		return
-	}
-	resume, err := s.store.SaveResume(r.Context(), s.userID, header.Filename, text)
+	resume, err := s.store.SaveResume(r.Context(), s.userID, in.Filename, in.Text)
 	s.respond(w, resume, err)
 }
 

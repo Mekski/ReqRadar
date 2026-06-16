@@ -106,9 +106,17 @@ export const getFitJDs = () => arr(get<FitJD[] | null>("/api/fit/jds"));
 export const getFitStatus = () => get<{ configured: boolean }>("/api/fit/status");
 
 export async function uploadResume(file: File): Promise<Resume> {
-  const form = new FormData();
-  form.append("resume", file);
-  const res = await fetch(`${API_BASE}/api/resumes`, { method: "POST", body: form });
+  // Extract text in the browser (pdf.js handles LaTeX spacing); send text, not the PDF.
+  const { extractPdfText } = await import("./pdf");
+  const text = await extractPdfText(file);
+  if (text.trim().length < 50) {
+    throw new Error("couldn't read text from this PDF — is it a scan/image? upload a text-based PDF");
+  }
+  const res = await fetch(`${API_BASE}/api/resumes`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name, text }),
+  });
   if (!res.ok) throw new Error((await res.text()) || `upload → ${res.status}`);
   return res.json() as Promise<Resume>;
 }

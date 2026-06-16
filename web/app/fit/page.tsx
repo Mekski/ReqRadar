@@ -167,16 +167,16 @@ export default function FitPage() {
                   setPostingId(j.posting_id);
                   setPastedJD("");
                 }}
-                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
+                className={`flex items-center gap-2 overflow-hidden rounded-lg border px-3 py-2 text-left text-sm transition-colors ${
                   postingId === j.posting_id ? "border-accent bg-accent/10" : "border-line hover:bg-overlay"
                 }`}
               >
-                <span className="rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-accent">
+                <span className="shrink-0 rounded border border-line px-1.5 py-0.5 font-mono text-[10px] text-accent">
                   {(j.tier || "—").toUpperCase()}
                 </span>
-                <span className="min-w-0">
+                <span className="min-w-0 flex-1 truncate">
                   <span className="text-ink">{j.company}</span>
-                  <span className="truncate text-muted"> · {j.title}</span>
+                  <span className="text-muted"> · {j.title}</span>
                 </span>
               </button>
             ))}
@@ -234,11 +234,30 @@ function FitReport({ result }: { result: FitResult }) {
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2">
-        <SkillList title="matched" items={result.matched_skills.map((m) => `${m.skill} — ${m.evidence}`)} />
-        <SkillList
-          title="missing"
-          items={result.missing_skills.map((m) => `${m.skill} (${m.importance})`)}
-        />
+        <div>
+          <SectionLabel>matched</SectionLabel>
+          <ul className="mt-2 space-y-1.5">
+            {result.matched_skills.length === 0 && <li className="font-mono text-xs text-dim">// none</li>}
+            {result.matched_skills.map((m, i) => (
+              <li key={i} className="break-words text-sm">
+                <span className="font-medium text-ink">{m.skill}</span>
+                {m.evidence && <span className="text-dim"> — {snippet(m.evidence)}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <SectionLabel>missing</SectionLabel>
+          <ul className="mt-2 space-y-1.5">
+            {result.missing_skills.length === 0 && <li className="font-mono text-xs text-dim">// none</li>}
+            {result.missing_skills.map((m, i) => (
+              <li key={i} className="break-words text-sm">
+                <span className="font-medium text-ink">{m.skill}</span>
+                <span className="text-dim"> ({m.importance})</span>
+              </li>
+            ))}
+          </ul>
+        </div>
       </div>
 
       {result.ats_keyword_gaps?.length > 0 && (
@@ -271,20 +290,12 @@ function FitReport({ result }: { result: FitResult }) {
   );
 }
 
-function SkillList({ title, items }: { title: string; items: string[] }) {
-  return (
-    <div>
-      <SectionLabel>{title}</SectionLabel>
-      <ul className="mt-2 space-y-1.5">
-        {items.length === 0 && <li className="font-mono text-xs text-dim">// none</li>}
-        {items.map((it, i) => (
-          <li key={i} className="text-sm text-muted">
-            {it}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
+// snippet trims an evidence quote to the relevant chunk (≤6 words, ellipsized) so
+// matched rows read cleanly instead of dumping the whole quoted line.
+function snippet(s: string, max = 6): string {
+  const words = s.trim().split(/\s+/);
+  if (words.length <= max) return s.trim();
+  return "…" + words.slice(0, max).join(" ") + "…";
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {

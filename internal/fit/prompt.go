@@ -62,7 +62,8 @@ Map total -> verdict:
 RULES:
 - Base every judgment ONLY on the provided resume and JD. Never assume skills,
   projects, or experience not written in the resume.
-- For each matched skill, cite a short quote from the resume as evidence.
+- For each matched skill, cite a SHORT quote (≤8 words) from the resume — the specific
+  phrase that shows the skill, not a whole sentence — as evidence.
 - List a missing skill only if the JD actually requires or prefers it.
 - Suggestions must be specific and actionable: rewrite/add a concrete bullet, name
   the exact keyword to add, suggest quantifying a result. No generic advice.
