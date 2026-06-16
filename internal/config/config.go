@@ -13,6 +13,8 @@ type Config struct {
 	LogLevel      slog.Level
 	TelegramToken string
 	APIAddr       string
+	GeminiKey     string // free-tier Gemini (fit score); empty = fit scoring returns "not configured"
+	GeminiModel   string
 }
 
 func Load() Config {
@@ -22,6 +24,8 @@ func Load() Config {
 		LogLevel:      parseLevel(env("REQRADAR_LOG_LEVEL", "info")),
 		TelegramToken: env("TELEGRAM_BOT_TOKEN", ""),
 		APIAddr:       env("REQRADAR_API_ADDR", ":8080"),
+		GeminiKey:     env("GEMINI_API_KEY", ""),
+		GeminiModel:   env("GEMINI_MODEL", "gemini-2.5-flash"),
 	}
 }
 

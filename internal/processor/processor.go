@@ -141,6 +141,7 @@ func (p *Processor) persist(ctx context.Context, raw signal.RawSignal, sourceID,
 			IsSummer:  isSummer,
 			FirstSeen: raw.ObservedAt, LastSeen: raw.ObservedAt,
 			PayMin: payMin, PayMax: payMax, PayPeriod: post.PayPeriod, PayCurrency: post.PayCurrency,
+			JDText: post.JDText,
 		})
 		if err != nil {
 			return fmt.Errorf("insert posting: %w", err)

@@ -22,6 +22,10 @@ type Posting struct {
 	PayMax      float64 `json:"pay_max"`
 	PayPeriod   string  `json:"pay_period"`
 	PayCurrency string  `json:"pay_currency"`
+
+	// JDText is the plain-text job description (ATS sources only); "" for
+	// SimplifyJobs. Stored so the fit-score JD picker can offer watchlist roles.
+	JDText string `json:"-"`
 }
 
 // Normalizer parses a source-native payload into a Posting. Normalization is the
@@ -87,6 +91,7 @@ func normalizeGreenhouse(payload []byte) (Posting, error) {
 	if pay, ok := extractPay(e.Content); ok {
 		p.PayMin, p.PayMax, p.PayPeriod, p.PayCurrency = pay.Min, pay.Max, pay.Period, pay.Currency
 	}
+	p.JDText = plainText(e.Content)
 	return p, nil
 }
 
@@ -125,6 +130,7 @@ func normalizeAshby(payload []byte) (Posting, error) {
 	if pay, ok := extractPay(e.Description); ok {
 		p.PayMin, p.PayMax, p.PayPeriod, p.PayCurrency = pay.Min, pay.Max, pay.Period, pay.Currency
 	}
+	p.JDText = plainText(e.Description)
 	return p, nil
 }
 

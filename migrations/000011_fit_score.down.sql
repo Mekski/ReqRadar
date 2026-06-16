@@ -1,0 +1,3 @@
+ALTER TABLE postings DROP COLUMN IF EXISTS jd_text;
+DROP TABLE IF EXISTS fit_scores;
+DROP TABLE IF EXISTS resumes;

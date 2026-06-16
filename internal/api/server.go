@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Mekski/reqradar/internal/fit"
 	"github.com/Mekski/reqradar/internal/store"
 )
 
@@ -16,10 +17,11 @@ type Server struct {
 	store  *store.Store
 	log    *slog.Logger
 	userID int64
+	fit    *fit.Service
 }
 
-func NewServer(st *store.Store, log *slog.Logger, userID int64) http.Handler {
-	s := &Server{store: st, log: log, userID: userID}
+func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service) http.Handler {
+	s := &Server{store: st, log: log, userID: userID, fit: fitSvc}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
@@ -33,6 +35,13 @@ func NewServer(st *store.Store, log *slog.Logger, userID int64) http.Handler {
 	mux.HandleFunc("GET /api/companies/{id}/seasonality", s.seasonality)
 	mux.HandleFunc("GET /api/postings", s.postings)
 	mux.HandleFunc("GET /api/firehose", s.firehose)
+	// Fit score (LLM): resume upload/list + JD picker + scoring.
+	mux.HandleFunc("POST /api/resumes", s.uploadResume)
+	mux.HandleFunc("GET /api/resumes", s.listResumes)
+	mux.HandleFunc("DELETE /api/resumes/{id}", s.deleteResume)
+	mux.HandleFunc("GET /api/fit/jds", s.fitJDs)
+	mux.HandleFunc("GET /api/fit/status", s.fitStatus)
+	mux.HandleFunc("POST /api/fit", s.scoreFit)
 	return cors(mux)
 }
 

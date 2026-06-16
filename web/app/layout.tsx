@@ -23,6 +23,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
             </Link>
             <div className="flex items-center gap-6 font-mono text-[13px]">
               <NavLink href="/">watchlist</NavLink>
+              <NavLink href="/fit">fit</NavLink>
               <NavLink href="/firehose">firehose</NavLink>
             </div>
           </nav>

@@ -36,9 +36,18 @@ Watchlist-first hiring intelligence ("radar for job reqs") for ~15 target compan
 
 Note free-tier rate limits — prioritize, don't ship all at once. Expected-open does NOT use an LLM (curated seed; see item 1a).
 
+**✅ Fit score — SCAFFOLDED (2026-06-16), pending Mark's `GEMINI_API_KEY`.** First LLM feature, built end-to-end except the live call.
+- **Provider = Gemini Flash** (free, no credit card; key from aistudio.google.com). `internal/llm` = provider interface + Gemini client (`responseMimeType: application/json`, temp 0.2 for stable scores). `GEMINI_API_KEY`/`GEMINI_MODEL` (default `gemini-2.5-flash`) in config + `.env.example`. **Empty key ⇒ everything works but `POST /api/fit` returns 503 "not configured"** (verified). Mark adds the key + restarts the api → scoring goes live.
+- **Resume input = PDF upload** (Mark uses Overleaf, so NO in-app editor). `resumes` table; PDF→text via `github.com/ledongthuc/pdf` (Overleaf/LaTeX PDFs extract cleanly; scanned PDFs error out). Multiple resumes, reusable. `POST/GET/DELETE /api/resumes`.
+- **The "fit" tab** (nav is now **watchlist · fit · firehose**): pick a resume → paste a JD **or** pick a watchlist role → score. JD picker is **ATS postings only** (Greenhouse/Ashby carry JD text in the new `postings.jd_text`, populated by the normalizers; SimplifyJobs/firehose have none → paste). Tiered S→C. Result UI: 0–100 + verdict, component-score bars, summary, matched/missing skills, ATS gaps, suggestions.
+- **Prompt** (Mark-approved) lives in `internal/fit/prompt.go` — rubric-anchored (Technical 40 / Experience 25 / Impact 15 / Eligibility 10 / ATS 10) so scores are consistent + defensible; intern-calibrated; cites resume evidence; specific suggestions.
+- **Architecture invariants honored:** LLM reached only on-demand from `POST /api/fit`, **never the alert path**; **cache forever** — `fit_scores` UNIQUE (jd_hash, resume_hash) ⇒ one Gemini call per unique (JD, resume) pair, ever (mirrors the resolution cache). Migration `000011`.
+- **Gotcha:** `jd_text` (like pay) is set on posting INSERT only, so existing ATS postings need a delete-+-re-poll (or a future re-extract) to populate it — done once for the current set.
+- **Next (Phase 2, cheap):** resume/JD optimization tips (same inputs, extend the call). Then sentiment/interview-prep (need HN/Reddit collectors), category-cleanup (maybe).
+
 **Wanted (Mark's picks):**
 - **Sentiment summaries** — summarize HN/Reddit chatter per company. (Genuine LLM use; needs the HN/Reddit collectors first.)
-- **Fit score** — given a posting's JD + Mark's resume, score the match + flag missing keywords. High interest. NOTE: introduces a NEW input — Mark's resume (store its text; upload or a config file). Mark felt this **subsumes JD-diff summaries** (see rejected).
+- **Fit score** — ✅ scaffolded (see above).
 - **Resume / JD optimization tips** — per target role, suggest resume tweaks to match the JD / pass ATS. (Pairs with fit score.)
 - **Interview-prep brief per company** — synthesize the interview process from public chatter; similar pipeline to sentiment.
 

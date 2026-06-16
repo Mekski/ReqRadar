@@ -169,15 +169,17 @@ type NewPosting struct {
 	PayMax      *float64
 	PayPeriod   string
 	PayCurrency string
+
+	JDText string // plain-text JD (ATS sources only); "" -> NULL
 }
 
 func (s *Store) InsertPosting(ctx context.Context, q DBTX, p NewPosting) (int64, error) {
 	var id int64
 	err := q.QueryRow(ctx,
-		`INSERT INTO postings (entity_id, source_id, external_id, title, url, locations, category, is_summer, first_seen, last_seen, status, pay_min, pay_max, pay_period, pay_currency)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open', $11, $12, $13, $14) RETURNING id`,
+		`INSERT INTO postings (entity_id, source_id, external_id, title, url, locations, category, is_summer, first_seen, last_seen, status, pay_min, pay_max, pay_period, pay_currency, jd_text)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'open', $11, $12, $13, $14, $15) RETURNING id`,
 		p.EntityID, p.SourceID, p.ExternalID, p.Title, p.URL, p.Locations, p.Category, p.IsSummer, p.FirstSeen, p.LastSeen,
-		p.PayMin, p.PayMax, nullStr(p.PayPeriod), nullStr(p.PayCurrency)).Scan(&id)
+		p.PayMin, p.PayMax, nullStr(p.PayPeriod), nullStr(p.PayCurrency), nullStr(p.JDText)).Scan(&id)
 	return id, err
 }
 

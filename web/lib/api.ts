@@ -44,6 +44,28 @@ export type FirehosePosting = {
   first_seen: string;
 };
 
+// ---- Fit score ----
+
+export type Resume = { id: number; filename: string; created_at: string };
+export type FitJD = { posting_id: number; company: string; title: string; tier: string; source: string };
+
+export type FitResult = {
+  overall_score: number;
+  verdict: string;
+  component_scores: {
+    technical_skills: number;
+    relevant_experience: number;
+    impact_depth: number;
+    eligibility_level: number;
+    ats_keywords: number;
+  };
+  summary: string;
+  matched_skills: { skill: string; evidence: string }[];
+  missing_skills: { skill: string; importance: string }[];
+  ats_keyword_gaps: string[];
+  suggestions: string[];
+};
+
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`${path} → ${res.status}`);
@@ -59,6 +81,37 @@ export const getSeasonality = (id: number, category = "swe") =>
   arr(get<SeasonBucket[] | null>(`/api/companies/${id}/seasonality?category=${category}`));
 export const getPostings = () => arr(get<OpenPosting[] | null>("/api/postings"));
 export const getFirehose = () => arr(get<FirehosePosting[] | null>("/api/firehose"));
+
+export const getResumes = () => arr(get<Resume[] | null>("/api/resumes"));
+export const getFitJDs = () => arr(get<FitJD[] | null>("/api/fit/jds"));
+export const getFitStatus = () => get<{ configured: boolean }>("/api/fit/status");
+
+export async function uploadResume(file: File): Promise<Resume> {
+  const form = new FormData();
+  form.append("resume", file);
+  const res = await fetch(`${API_BASE}/api/resumes`, { method: "POST", body: form });
+  if (!res.ok) throw new Error((await res.text()) || `upload → ${res.status}`);
+  return res.json() as Promise<Resume>;
+}
+
+export async function deleteResume(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/resumes/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`delete resume → ${res.status}`);
+}
+
+export async function scoreFit(input: {
+  resume_id: number;
+  posting_id?: number;
+  jd_text?: string;
+}): Promise<FitResult> {
+  const res = await fetch(`${API_BASE}/api/fit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw new Error((await res.text()) || `score → ${res.status}`);
+  return res.json() as Promise<FitResult>;
+}
 
 export async function addCompany(input: {
   name: string;

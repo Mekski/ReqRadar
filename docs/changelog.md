@@ -2,6 +2,17 @@
 
 Notable changes, newest first. Scoped to the audit-and-hardening workstream (the main feature history lives in git / CLAUDE.md). Commit hashes are short SHAs on `main`.
 
+## 2026-06-16
+
+### Feature — Fit score scaffolding (first LLM feature; free-tier Gemini)
+Built the fit-score feature end-to-end except the live model call (pending Mark's `GEMINI_API_KEY`). Match a resume against a JD → rubric-based 0–100 + matched/missing skills + resume tips.
+- **`internal/llm`** — provider interface + Gemini client (free-tier, `responseMimeType: application/json`, temp 0.2). Key/model from config (`GEMINI_API_KEY`, `GEMINI_MODEL` default `gemini-2.5-flash`); empty key ⇒ a clean 503 "not configured", not a crash (verified live).
+- **`internal/fit`** — the Mark-approved rubric prompt (Technical 40 / Experience 25 / Impact 15 / Eligibility 10 / ATS 10), PDF→text extraction (`ledongthuc/pdf`; Overleaf PDFs extract cleanly), and `Score()` with **cache-forever** semantics.
+- **Migration `000011`** — `resumes`, `fit_scores` (UNIQUE (jd_hash, resume_hash) ⇒ one model call per unique pair, ever), and `postings.jd_text` (plain JD text the normalizers now populate for Greenhouse/Ashby).
+- **API** — `POST/GET/DELETE /api/resumes` (multipart PDF upload), `GET /api/fit/jds` (tiered ATS watchlist roles with stored JD), `GET /api/fit/status`, `POST /api/fit`. LLM is reached only here, on-demand — never the alert path.
+- **Frontend** — new **fit** tab (nav: watchlist · fit · firehose): resume upload/select → paste a JD or pick a watchlist role (tiered S→C) → score; result shows the 0–100, component bars, summary, matched/missing skills, ATS gaps, suggestions.
+- **Decisions documented in CLAUDE.md** (provider, PDF upload over an editor, ATS-only JD picker since only Greenhouse/Ashby store JD text, cache-forever, the prompt rubric). Verified: all endpoints respond, JD picker returns 14 ATS roles, full path reaches graceful not-configured. Go tests + tsc green.
+
 ## 2026-06-15
 
 ### Fix — firehose polluted by backfill (showed dead 404s) + UX
