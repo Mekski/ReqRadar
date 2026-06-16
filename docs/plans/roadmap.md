@@ -6,6 +6,8 @@ From the [2026-06-15 audit](../audits/2026-06-15-progress-audit.md). Ordering re
 - ✅ First test suite: unit + golden-file (collector) + Postgres/NATS integration (dedupe state machine). See [changelog](../changelog.md).
 - ✅ CI made real: `lint` (golangci-lint v2) + `frontend` (`next build`) + `integration` jobs; actions bumped to Node 24.
 - ✅ Alert-loss trio (H1/H2/H3): consumer redelivery caps + transactional outbox (hybrid inline+relay). See [issues/alert-loss-trio.md](../issues/alert-loss-trio.md).
+- ✅ Alert-path tests + Telegram error handling (OBS-1).
+- ✅ Over-engineering audit follow-ups: dispatcher last-hop drop fixed (§1b), `resolution_decisions` made a cache (§4.1). Remaining items (partitioning, dead code, duplication, Prometheus) tracked in [issues/audit-findings.md](../issues/audit-findings.md).
 
 ## Next (recommended order)
 

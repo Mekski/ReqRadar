@@ -4,6 +4,9 @@ Notable changes, newest first. Scoped to the audit-and-hardening workstream (the
 
 ## 2026-06-15
 
+### Fix — close the dispatcher last-hop alert drop (over-engineering audit §1b)
+The transactional outbox guarantees an event survives processor→NATS, but the dispatcher then *swallowed* Telegram send failures and Ack'd anyway — dropping the alert at the last hop and partly negating H1/H2 (the weak link the over-engineering audit rightly flagged). `handleWatchlist`/`handleFirehose` (`internal/api/dispatcher.go`) now **return** the send error, so the events consumer Nak's and redelivers under the `MaxDeliver(5)`/`BackOff` caps added in H3 (terminated + logged after 5 attempts, never hot-looping). A retried alert records a larger, honest `detect_to_alert_ms`. Right-sized for single-user — no multi-user dedup machinery added (noted as a future step in [issues/audit-findings.md](issues/audit-findings.md), OE-§1b). Commit `05a015a`.
+
 ### Fix — resolution_decisions is now a cache, not a per-restart append (over-engineering audit §4.1)
 `recordDecision` deduped only via an in-memory set (reset each process), so every processor restart re-appended a decision row for every company string in the feed — into a "kept forever" table. Validated on the dev DB: **36,847 rows for only 4,258 distinct strings (~8.6× bloat)**. Once an LLM resolution step lands this would also re-trigger calls, violating "one call per unique string, ever."
 - Migration `000009`: collapse existing duplicates (keep earliest per string) → `36,847 → 4,258` rows, then replace the non-unique index with a UNIQUE index on `raw_text`.
