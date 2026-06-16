@@ -19,3 +19,10 @@ web/build/
 .DS_Store
 *.swp
 .idea/
+
+# Internal working docs (agent-facing) — kept local, not published. The README
+# screenshots under docs/assets/*.png stay tracked (the public README embeds them).
+/CLAUDE.md
+/DESIGN.md
+/WATCHLIST.md
+/docs/**/*.md

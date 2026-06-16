@@ -19,7 +19,7 @@
 
 Job boards tell you what's open. ReqRadar tells you **when each of your target companies historically opens its summer SWE-intern applications — and pings your phone the moment a new role drops.** You bookmark ~30 companies into tiers; it mines live and 3-year-historical posting signals, resolves them to your watchlist, learns each company's seasonal opening window, and fires **sub-minute Telegram alerts** on every new role.
 
-It's deliberately built as an **event-driven, multi-service system** — the distributed-systems, real-time-data, API-design, and CI/CD work that internship JDs actually ask for, not five cron scripts. Every component is meant to survive the interview question *"why not something simpler?"* (the rejected alternatives are written down in [DESIGN.md §10](DESIGN.md)).
+It's deliberately built as an **event-driven, multi-service system** — the distributed-systems, real-time-data, API-design, and CI/CD work that internship JDs actually ask for, not five cron scripts. Every component is meant to survive the interview question *"why not something simpler?"* — the simpler alternatives (Kafka, a second datastore, a monolith) were each evaluated and deliberately rejected at this scale.
 
 ---
 
@@ -58,7 +58,7 @@ A one-click report per company synthesizing what engineers actually say — pres
 
 ## Architecture
 
-Three Go services over NATS JetStream, one PostgreSQL, a Next.js dashboard. Single VM + Docker Compose — **no Kafka, no second datastore, no Kubernetes** (each evaluated and rejected in [DESIGN.md §10](DESIGN.md)).
+Three Go services over NATS JetStream, one PostgreSQL, a Next.js dashboard. Single VM + Docker Compose — **no Kafka, no second datastore, no Kubernetes**, each evaluated and rejected for this scale.
 
 ```mermaid
 flowchart LR
@@ -96,7 +96,7 @@ flowchart LR
 - **Real CI** (GitHub Actions): `lint` (golangci-lint), `unit`, `frontend` (`next build`), and an `integration` job that spins **real Postgres + NATS** to exercise the dedupe state machine and the outbox.
 - **Golden-file collector tests** from captured payloads — source-format drift fails CI instead of silently dropping data.
 - **`event_time` vs `observed_at`** kept distinct throughout, so 3-year backfill and sub-minute latency coexist without conflating "when it happened" with "when we saw it."
-- A written **design doc with rejected alternatives** and a tracked [`docs/`](docs/) audit trail — decisions you can defend, not just code.
+- **Every heavy choice is deliberate** — NATS over a Postgres queue, a transactional outbox over fire-and-forget, partitioning weighed against a plain table — each defensible on its own terms, not cargo-culted.
 
 ---
 
@@ -135,10 +135,3 @@ Integration tests need a throwaway Postgres + NATS: `make test-integration` (see
 End-to-end and verified on a live stack, CI green: the collector → NATS → processor → Postgres pipeline; three collectors (SimplifyJobs + git-history backfill, Greenhouse, Ashby); ~3 years of backfilled timing and "expected open" seasonality across 30 companies; posted-pay extraction; watchlist + firehose Telegram alerts; both LLM features; and the Next.js dashboard. **Remaining:** a free always-on deployment so alerts run 24/7, an HN sentiment source, and a calendar view.
 
 > Single-user project (built for my own Summer-2027 internship search). The schema leaves the multi-user seam but there are no signup/auth flows by design.
-
-## Docs
-
-- **[DESIGN.md](DESIGN.md)** — full architecture, data model, event flow, entity resolution, and rejected alternatives.
-- **[CLAUDE.md](CLAUDE.md)** — current state, hard-won operational gotchas, and ranked next steps.
-- **[docs/](docs/)** — audits, tracked issues, roadmap, and a changelog.
-- **[WATCHLIST.md](WATCHLIST.md)** — verified per-company source mapping.
