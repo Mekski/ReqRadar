@@ -34,7 +34,13 @@ var (
 // period keyword may appear on either side — Greenhouse writes "Hourly Pay Range
 // $72 — $72 USD" (keyword before) while other JDs write "$45/hour" (keyword after).
 func extractPay(content string) (Pay, bool) {
-	text := plainText(content)
+	return extractPayText(plainText(content))
+}
+
+// extractPayText is extractPay over already-plain text, so a caller that also
+// needs the plain text (the normalizers store it as jd_text) can run plainText
+// once and pass the result to both instead of stripping the HTML twice.
+func extractPayText(text string) (Pay, bool) {
 	lower := strings.ToLower(text)
 
 	for _, m := range payRangeRE.FindAllStringSubmatchIndex(text, -1) {

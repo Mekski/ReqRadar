@@ -20,6 +20,7 @@ function formatPay(c: Company): string {
 export function CompanyCard({ company, index = 0 }: { company: Company; index?: number }) {
   const router = useRouter();
   const [removing, setRemoving] = useState(false);
+  const [tierBusy, setTierBusy] = useState(false);
 
   async function onRemove(e: React.MouseEvent) {
     e.preventDefault();
@@ -34,8 +35,17 @@ export function CompanyCard({ company, index = 0 }: { company: Company; index?: 
   }
 
   async function onTier(e: React.ChangeEvent<HTMLSelectElement>) {
-    await updateTier(company.id, e.target.value);
-    router.refresh();
+    setTierBusy(true);
+    try {
+      await updateTier(company.id, e.target.value);
+    } catch {
+      // Leave the server value unchanged; the refresh below re-renders the
+      // (props-controlled) select back to the real tier instead of leaving the
+      // native selection showing a value the server never accepted.
+    } finally {
+      setTierBusy(false);
+      router.refresh();
+    }
   }
 
   const tier = (company.priority || "A").toUpperCase();
@@ -47,6 +57,7 @@ export function CompanyCard({ company, index = 0 }: { company: Company; index?: 
           value={tier}
           onChange={onTier}
           onClick={(e) => e.stopPropagation()}
+          disabled={tierBusy}
           title="Change tier"
           className="cursor-pointer rounded border border-line bg-surface px-1 py-0.5 font-mono text-[10px] text-muted hover:text-accent focus:outline-none"
         >

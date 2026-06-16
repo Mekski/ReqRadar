@@ -31,6 +31,32 @@ func NewGemini(key, model string) *Gemini {
 func (g *Gemini) Model() string    { return g.model }
 func (g *Gemini) Configured() bool { return g.key != "" }
 
+// callGenerate POSTs a generateContent request body and returns the raw response
+// bytes (shared by GenerateJSON and GenerateGrounded — the request/transport
+// plumbing lived in both before). The API key goes in the x-goog-api-key header
+// rather than the URL query string, so it can't leak into proxy/access logs.
+func (g *Gemini) callGenerate(ctx context.Context, reqBody map[string]any) ([]byte, error) {
+	body, _ := json.Marshal(reqBody)
+	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent", g.model)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-goog-api-key", g.key)
+
+	resp, err := g.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("gemini status %d: %s", resp.StatusCode, truncate(raw, 300))
+	}
+	return raw, nil
+}
+
 func (g *Gemini) GenerateJSON(ctx context.Context, prompt string, schema map[string]any) ([]byte, error) {
 	if g.key == "" {
 		return nil, ErrNotConfigured
@@ -50,23 +76,9 @@ func (g *Gemini) GenerateJSON(ctx context.Context, prompt string, schema map[str
 		"contents":         []any{map[string]any{"parts": []any{map[string]any{"text": prompt}}}},
 		"generationConfig": genCfg,
 	}
-	body, _ := json.Marshal(reqBody)
-
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", g.model, g.key)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	raw, err := g.callGenerate(ctx, reqBody)
 	if err != nil {
 		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("gemini status %d: %s", resp.StatusCode, truncate(raw, 300))
 	}
 
 	var out struct {
@@ -124,23 +136,9 @@ func (g *Gemini) GenerateGrounded(ctx context.Context, prompt string) (string, [
 		"tools":            []any{map[string]any{"google_search": map[string]any{}}},
 		"generationConfig": map[string]any{"temperature": 0.3},
 	}
-	body, _ := json.Marshal(reqBody)
-
-	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", g.model, g.key)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	raw, err := g.callGenerate(ctx, reqBody)
 	if err != nil {
 		return "", nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := g.client.Do(req)
-	if err != nil {
-		return "", nil, err
-	}
-	defer resp.Body.Close()
-	raw, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != http.StatusOK {
-		return "", nil, fmt.Errorf("gemini status %d: %s", resp.StatusCode, truncate(raw, 300))
 	}
 
 	var out struct {

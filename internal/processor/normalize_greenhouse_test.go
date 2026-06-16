@@ -70,6 +70,14 @@ func TestInferCategory(t *testing.T) {
 		{"Applied Scientist - PhD Intern", []string{"Early Career Internships"}, "AI/ML/Data"},
 		{"Data Scientist Intern", nil, "AI/ML/Data"},
 		{"Product Design Intern", []string{"Design"}, ""},
+		// "ai"/"ml" must match only as whole words, incl. at end-of-string...
+		{"Intern, ML", nil, "AI/ML/Data"},
+		{"AI Resident", nil, "AI/ML/Data"},
+		{"Intern", []string{"AI Research"}, "AI/ML/Data"},
+		// ...and must NOT false-match inside other words (the bug the \b regex fixes).
+		{"Retail Operations Intern", nil, ""},
+		{"Email Marketing Intern", nil, ""},
+		{"Detail-Oriented Analyst Intern", nil, ""},
 	}
 	for _, c := range cases {
 		if got := inferCategory(c.title, c.dept); got != c.want {

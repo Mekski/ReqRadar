@@ -84,8 +84,19 @@ func main() {
 	fitSvc := fit.New(gemini, st)
 	sentSvc := sentiment.New(gemini, st)
 
-	// REST API for the dashboard.
-	srv := &http.Server{Addr: cfg.APIAddr, Handler: api.NewServer(st, log, userID, fitSvc, sentSvc)}
+	// REST API for the dashboard. Timeouts guard against slow/abandoned clients
+	// once this is internet-reachable; WriteTimeout sits above the LLM call budget
+	// so on-demand fit/sentiment responses aren't cut off mid-flight.
+	srv := &http.Server{
+		Addr:              cfg.APIAddr,
+		Handler: api.NewServer(st, log, userID, fitSvc, sentSvc, api.ServerConfig{
+			APIToken: cfg.APIToken, CORSOrigin: cfg.CORSOrigin,
+		}),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
 	go func() {
 		log.Info("api listening", "addr", cfg.APIAddr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {

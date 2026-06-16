@@ -1,6 +1,7 @@
-import { getCompanies, API_BASE, type Company } from "@/lib/api";
+import { getCompanies, type Company } from "@/lib/api";
 import { CompanyCard } from "@/app/components/CompanyCard";
 import { AddCompanyForm } from "@/app/components/AddCompanyForm";
+import { ApiDown } from "@/app/components/ui";
 
 const TIER_ORDER = ["S", "A", "B", "C"];
 
@@ -58,11 +59,3 @@ export default async function Home() {
   );
 }
 
-function ApiDown() {
-  return (
-    <div className="panel rounded-xl p-4 font-mono text-sm text-accent">
-      <span className="text-dim">// </span>no connection to API at <span className="text-ink">{API_BASE}</span> — run{" "}
-      <span className="text-ink">make run-api</span>
-    </div>
-  );
-}

@@ -23,18 +23,10 @@ services:
     command: ["-js", "-m", "8222"]
     ports: ["4222:4222", "8222:8222"]
 
-  prometheus:
-    image: prom/prometheus:latest
-    ports: ["9090:9090"]
-    volumes: ["./prometheus.yml:/etc/prometheus/prometheus.yml:ro"]
-
-  grafana:
-    image: grafana/grafana:latest
-    environment:
-      GF_AUTH_ANONYMOUS_ENABLED: "true"
-      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
-    # Host 3001 to avoid colliding with the Next.js dev server on 3000.
-    ports: ["3001:3000"]
+# NOTE: a Prometheus + Grafana pair lived here, but no service exposes a /metrics
+# endpoint yet, so they scraped nothing. Removed to keep the stack honest and the
+# deploy small. detect_to_alert_ms already lives in the `alerts` table; wiring a
+# real promhttp endpoint + one histogram is a post-deploy enhancement (DESIGN §7).
 
 volumes:
   pgdata:

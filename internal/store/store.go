@@ -191,10 +191,39 @@ func nullStr(s string) *string {
 	return &s
 }
 
-func (s *Store) UpdatePosting(ctx context.Context, q DBTX, id int64, title, url string, locations []string, lastSeen time.Time) error {
+// PostingUpdate carries the fields refreshed when a posting's content changes.
+// Pay/jd_text are included so a later JD edit (e.g. a role that adds "$X/hr"
+// after first appearing without it) is actually reflected — previously they were
+// written only on first insert and never updated.
+type PostingUpdate struct {
+	Title     string
+	URL       string
+	Locations []string
+	LastSeen  time.Time
+
+	PayMin      *float64
+	PayMax      *float64
+	PayPeriod   string
+	PayCurrency string
+	JDText      string
+}
+
+// UpdatePosting refreshes a changed posting. Pay/jd are only overwritten when the
+// new version actually carries them (COALESCE keeps a previously-known value rather
+// than blanking it when a later JD revision drops the figure) — so we never lose a
+// pay range we once extracted, but we do pick one up when it first appears.
+func (s *Store) UpdatePosting(ctx context.Context, q DBTX, id int64, p PostingUpdate) error {
 	_, err := q.Exec(ctx,
-		`UPDATE postings SET title = $2, url = $3, locations = $4, last_seen = $5, status = 'open' WHERE id = $1`,
-		id, title, url, locations, lastSeen)
+		`UPDATE postings
+		 SET title = $2, url = $3, locations = $4, last_seen = $5, status = 'open',
+		     pay_min      = COALESCE($6, pay_min),
+		     pay_max      = COALESCE($7, pay_max),
+		     pay_period   = COALESCE($8, pay_period),
+		     pay_currency = COALESCE($9, pay_currency),
+		     jd_text      = COALESCE($10, jd_text)
+		 WHERE id = $1`,
+		id, p.Title, p.URL, p.Locations, p.LastSeen,
+		p.PayMin, p.PayMax, nullStr(p.PayPeriod), nullStr(p.PayCurrency), nullStr(p.JDText))
 	return err
 }
 

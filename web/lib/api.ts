@@ -2,7 +2,6 @@
 // internal/store/api.go and internal/signal.
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
-export type TimingBucket = { month: string; count: number };
 export type SeasonBucket = { month: number; count: number }; // month 1–12
 
 export type Company = {
@@ -10,9 +9,6 @@ export type Company = {
   name: string;
   domain: string;
   priority: string;
-  open_postings: number;
-  total_events: number;
-  timing: TimingBucket[] | null; // Go marshals an empty slice as null
   expected_open: string; // data-derived SWE peak month, e.g. "Aug" ("" if too few samples)
   expected_estimate: string; // curated fallback month when data is sparse ("" if none)
   pay_min: number; // posted pay of the latest SWE-category intern (0 when unknown)
@@ -24,15 +20,6 @@ export type TimelineEvent = {
   type: string;
   event_time: string;
   data: { company?: string; title?: string; url?: string; locations?: string[] };
-};
-
-export type OpenPosting = {
-  id: number;
-  company: string;
-  title: string;
-  url: string;
-  locations: string[];
-  first_seen: string;
 };
 
 export type FirehosePosting = {
@@ -98,7 +85,6 @@ export const getCompanies = () => arr(get<Company[] | null>("/api/companies"));
 export const getTimeline = (id: number) => arr(get<TimelineEvent[] | null>(`/api/companies/${id}/timeline`));
 export const getSeasonality = (id: number, category = "swe") =>
   arr(get<SeasonBucket[] | null>(`/api/companies/${id}/seasonality?category=${category}`));
-export const getPostings = () => arr(get<OpenPosting[] | null>("/api/postings"));
 export const getFirehose = () => arr(get<FirehosePosting[] | null>("/api/firehose"));
 
 export const getResumes = () => arr(get<Resume[] | null>("/api/resumes"));

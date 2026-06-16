@@ -1,15 +1,12 @@
-import { getFirehose, API_BASE } from "@/lib/api";
+import { getFirehose } from "@/lib/api";
+import { ApiDown } from "@/app/components/ui";
 
 export default async function FirehosePage() {
   let items;
   try {
     items = await getFirehose();
   } catch {
-    return (
-      <div className="panel rounded-xl p-4 font-mono text-sm text-accent">
-        <span className="text-dim">// </span>no connection to API at <span className="text-ink">{API_BASE}</span>
-      </div>
-    );
+    return <ApiDown />;
   }
 
   return (

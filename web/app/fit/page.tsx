@@ -12,6 +12,7 @@ import {
   scoreFit,
   uploadResume,
 } from "@/lib/api";
+import { SectionLabel } from "@/app/components/ui";
 
 const TIER_ORDER = ["S", "A", "B", "C"];
 
@@ -28,11 +29,14 @@ export default function FitPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    getResumes().then((r) => {
-      setResumes(r);
-      if (r[0]) setResumeId(r[0].id);
-    });
-    getFitJDs().then(setJDs);
+    const apiDown = () => setError("couldn't reach the API — is `make run-api` running?");
+    getResumes()
+      .then((r) => {
+        setResumes(r);
+        if (r[0]) setResumeId(r[0].id);
+      })
+      .catch(apiDown);
+    getFitJDs().then(setJDs).catch(apiDown);
     getFitStatus().then((s) => setConfigured(s.configured)).catch(() => {});
   }, []);
 
@@ -298,6 +302,3 @@ function snippet(s: string, max = 6): string {
   return "…" + words.slice(0, max).join(" ") + "…";
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <h2 className="font-mono text-[11px] uppercase tracking-widest text-accent">{children}</h2>;
-}

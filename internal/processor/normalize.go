@@ -88,10 +88,11 @@ func normalizeGreenhouse(payload []byte) (Posting, error) {
 		Terms:     termsFromTitle(e.Title),
 		Category:  inferCategory(e.Title, e.Departments),
 	}
-	if pay, ok := extractPay(e.Content); ok {
+	jd := plainText(e.Content) // strip HTML once; reused for pay + jd_text
+	if pay, ok := extractPayText(jd); ok {
 		p.PayMin, p.PayMax, p.PayPeriod, p.PayCurrency = pay.Min, pay.Max, pay.Period, pay.Currency
 	}
-	p.JDText = plainText(e.Content)
+	p.JDText = jd
 	return p, nil
 }
 
@@ -127,14 +128,21 @@ func normalizeAshby(payload []byte) (Posting, error) {
 		Terms:     termsFromTitle(e.Title),
 		Category:  inferCategory(e.Title, departments),
 	}
-	if pay, ok := extractPay(e.Description); ok {
+	jd := plainText(e.Description) // strip HTML once; reused for pay + jd_text
+	if pay, ok := extractPayText(jd); ok {
 		p.PayMin, p.PayMax, p.PayPeriod, p.PayCurrency = pay.Min, pay.Max, pay.Period, pay.Currency
 	}
-	p.JDText = plainText(e.Description)
+	p.JDText = jd
 	return p, nil
 }
 
 var seasonRE = regexp.MustCompile(`(?i)\b(Summer|Fall|Winter|Spring)\b(?:\s+(\d{4}))?`)
+
+// aiMLRE matches "ai" or "ml" as whole words only. A plain Contains(hay, "ml ")
+// false-matches inside "email", "retail", "detail" and misses an end-of-string
+// "…, ML"; the word boundaries fix both. (machine learning / data science etc. are
+// matched separately by their full phrases.)
+var aiMLRE = regexp.MustCompile(`(?i)\b(ai|ml)\b`)
 
 // termsFromTitle extracts a "Summer 2027"-style term from a Greenhouse title so
 // the processor's is_summer detection (Terms prefix "Summer") works the same way
@@ -162,9 +170,9 @@ func inferCategory(title string, departments []string) string {
 	switch {
 	case strings.Contains(hay, "software") || strings.Contains(hay, "swe"):
 		return "Software Engineering"
-	case strings.Contains(hay, "machine learning") || strings.Contains(hay, "ml ") ||
-		strings.Contains(hay, "ai ") || strings.Contains(hay, "data scien") ||
-		strings.Contains(hay, "applied scien") || strings.Contains(hay, "research scien"):
+	case strings.Contains(hay, "machine learning") || strings.Contains(hay, "data scien") ||
+		strings.Contains(hay, "applied scien") || strings.Contains(hay, "research scien") ||
+		aiMLRE.MatchString(hay):
 		return "AI/ML/Data"
 	default:
 		return ""

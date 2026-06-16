@@ -13,6 +13,7 @@ import (
 // handles LaTeX/Overleaf spacing far better than a Go extractor), so this just
 // takes the extracted text.
 func (s *Server) uploadResume(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxResumeBody)
 	var in struct {
 		Filename string `json:"filename"`
 		Text     string `json:"text"`
@@ -63,6 +64,7 @@ func (s *Server) fitStatus(w http.ResponseWriter, _ *http.Request) {
 // scoreFit scores a resume against a JD (a pasted jd_text, or a watchlist
 // posting_id whose stored JD we use). Returns the cached or fresh result.
 func (s *Server) scoreFit(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
 	var in struct {
 		ResumeID  int64  `json:"resume_id"`
 		PostingID *int64 `json:"posting_id"`
@@ -93,7 +95,11 @@ func (s *Server) scoreFit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, cached, err := s.fit.Score(ctx, resumeText, jd, in.PostingID)
+	// Detach from the request so closing the tab mid-score still completes + caches
+	// the Gemini call (otherwise the next attempt re-pays for the same pair).
+	genCtx, cancel := detachedLLMCtx(ctx)
+	defer cancel()
+	result, cached, err := s.fit.Score(genCtx, resumeText, jd, in.PostingID)
 	if errors.Is(err, llm.ErrNotConfigured) {
 		http.Error(w, "fit scoring isn't configured yet — add GEMINI_API_KEY to .env and restart the api", http.StatusServiceUnavailable)
 		return

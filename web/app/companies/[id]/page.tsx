@@ -3,6 +3,7 @@ import { getCompanies, getTimeline, getSeasonality } from "@/lib/api";
 import { Logo } from "@/app/components/Logo";
 import { Seasonality, expectedWindow } from "@/app/components/Seasonality";
 import { SentimentCard } from "@/app/components/SentimentCard";
+import { SectionLabel } from "@/app/components/ui";
 
 function fmtDate(iso: string): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -59,7 +60,7 @@ export default async function CompanyPage({
       {/* Hero: the flagship answer — when does this company open roles? */}
       <section className="panel rounded-xl p-6">
         <div className="flex items-start justify-between gap-3">
-          <SectionLabel>expected to open</SectionLabel>
+          <SectionLabel bar>expected to open</SectionLabel>
           <div className="flex gap-1 font-mono text-[11px]">
             {FILTERS.map((f) => (
               <Link
@@ -87,7 +88,7 @@ export default async function CompanyPage({
 
       {/* One clear, dated list of roles seen (replaces the old ambiguous split). */}
       <section className="panel rounded-xl p-5">
-        <SectionLabel>recent roles · {timeline.length}</SectionLabel>
+        <SectionLabel bar>recent roles · {timeline.length}</SectionLabel>
         <ul className="mt-4 space-y-2.5">
           {timeline.slice(0, 30).map((e, i) => (
             <li key={i} className="flex items-baseline justify-between gap-3 border-b border-line pb-2.5 text-sm last:border-0">
@@ -116,11 +117,3 @@ export default async function CompanyPage({
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div>
-      <h2 className="font-mono text-[11px] uppercase tracking-widest text-accent">{children}</h2>
-      <span className="accent-bar mt-2 block" />
-    </div>
-  );
-}

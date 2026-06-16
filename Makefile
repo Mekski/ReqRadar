@@ -1,6 +1,6 @@
 .PHONY: dev-up dev-down nats-reset migrate migrate-down build test test-integration fmt vet check
 
-# Bring the local dev stack up/down (postgres, nats, prometheus, grafana).
+# Bring the local dev stack up/down (postgres, nats).
 dev-up:
 	docker compose -f deploy/docker-compose.yml up -d
 

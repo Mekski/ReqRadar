@@ -114,7 +114,7 @@ flowchart LR
 Needs Docker, Go 1.26, and Node. Put secrets in `.env` (gitignored): `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, `GITHUB_TOKEN` (backfill), and `GEMINI_API_KEY` (the LLM features; everything else runs without it).
 
 ```sh
-make dev-up          # postgres, nats (+JetStream), prometheus, grafana
+make dev-up          # postgres, nats (+JetStream)
 make migrate         # apply schema
 make seed            # load seed/watchlist.yaml
 make run-collector   # poll sources → NATS

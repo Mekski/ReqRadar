@@ -29,7 +29,11 @@ func (s *Server) generateSentiment(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	report, err := s.sentiment.Generate(r.Context(), id)
+	// Detach so a closed tab still completes + stores the grounded report (a
+	// grounded search isn't free; don't throw it away on disconnect).
+	genCtx, cancel := detachedLLMCtx(r.Context())
+	defer cancel()
+	report, err := s.sentiment.Generate(genCtx, id)
 	if errors.Is(err, llm.ErrNotConfigured) {
 		http.Error(w, "sentiment isn't configured yet — add GEMINI_API_KEY to .env and restart the api", http.StatusServiceUnavailable)
 		return

@@ -13,6 +13,8 @@ type Config struct {
 	LogLevel      slog.Level
 	TelegramToken string
 	APIAddr       string
+	APIToken      string // optional bearer token; when set, /api/* requires it. Empty = open (local dev)
+	CORSOrigin    string // Access-Control-Allow-Origin; default "*" for local dev, set to the dashboard origin in prod
 	GeminiKey     string // free-tier Gemini (fit score); empty = fit scoring returns "not configured"
 	GeminiModel   string
 }
@@ -24,6 +26,8 @@ func Load() Config {
 		LogLevel:      parseLevel(env("REQRADAR_LOG_LEVEL", "info")),
 		TelegramToken: env("TELEGRAM_BOT_TOKEN", ""),
 		APIAddr:       env("REQRADAR_API_ADDR", ":8080"),
+		APIToken:      env("REQRADAR_API_TOKEN", ""),
+		CORSOrigin:    env("REQRADAR_CORS_ORIGIN", "*"),
 		GeminiKey:     env("GEMINI_API_KEY", ""),
 		GeminiModel:   env("GEMINI_MODEL", "gemini-2.5-flash"),
 	}

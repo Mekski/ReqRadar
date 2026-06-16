@@ -64,17 +64,11 @@ func (s *Store) AllUserChatIDs(ctx context.Context) ([]string, error) {
 }
 
 // MarkFirehoseSeen records a firehose posting and returns true if it was new
-// (not previously seen). The insert-or-ignore makes "is this new?" a single
-// atomic op.
+// (not previously seen) — the non-transactional variant for callers (e.g.
+// firehose-prime) that aren't inside a tx. It just runs MarkFirehoseSeenTx against
+// the pool so the SQL lives in one place.
 func (s *Store) MarkFirehoseSeen(ctx context.Context, source, externalID, company, title, url, category string, eventTime time.Time) (bool, error) {
-	tag, err := s.Pool.Exec(ctx,
-		`INSERT INTO firehose_seen (source, external_id, company, title, url, category, event_time)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (source, external_id) DO NOTHING`,
-		source, externalID, company, title, url, category, eventTime)
-	if err != nil {
-		return false, err
-	}
-	return tag.RowsAffected() == 1, nil
+	return s.MarkFirehoseSeenTx(ctx, s.Pool, source, externalID, company, title, url, category, eventTime)
 }
 
 // FirstUserID returns the single v1 user's id.
@@ -100,7 +94,18 @@ type CompanyInput struct {
 // watchlist row for userID — the one definition shared by cmd/seed and the
 // POST /api/companies handler. Runs inside the caller's transaction (q).
 func (s *Store) UpsertCompany(ctx context.Context, q DBTX, userID int64, in CompanyInput) (int64, error) {
-	metaMap := map[string]any{"priority": in.Priority}
+	// Only include keys we actually have, so a manual add with a blank field can't
+	// null out an existing value. On conflict we MERGE (metadata || EXCLUDED.metadata)
+	// rather than replace, so this writer only touches the keys it sets and leaves
+	// other UI-managed keys intact. Precedence: for a key present on both sides the
+	// incoming value wins — so `make seed` stays authoritative for priority /
+	// expected_estimate (the YAML is the reconciled source of truth), while a UI-only
+	// key the seed doesn't carry survives a re-seed. (Edit tiers in the YAML if you
+	// re-seed; an interim UI tier edit persists until the next seed.)
+	metaMap := map[string]any{}
+	if in.Priority != "" {
+		metaMap["priority"] = in.Priority
+	}
 	if in.ExpectedEstimate != "" {
 		metaMap["expected_estimate"] = in.ExpectedEstimate
 	}
@@ -110,7 +115,8 @@ func (s *Store) UpsertCompany(ctx context.Context, q DBTX, userID int64, in Comp
 		`INSERT INTO entities (kind, canonical_name, domain, metadata)
 		 VALUES ('company', $1, $2, $3)
 		 ON CONFLICT (kind, canonical_name)
-		 DO UPDATE SET domain = EXCLUDED.domain, metadata = EXCLUDED.metadata
+		 DO UPDATE SET domain = EXCLUDED.domain,
+		               metadata = COALESCE(entities.metadata, '{}') || EXCLUDED.metadata
 		 RETURNING id`,
 		in.Name, in.Domain, meta).Scan(&entityID); err != nil {
 		return 0, err
@@ -194,15 +200,12 @@ func (s *Store) RecentFirehose(ctx context.Context, limit int) ([]FirehosePostin
 // ---- Dashboard reads ----
 
 type CompanySummary struct {
-	ID           int64          `json:"id"`
-	Name         string         `json:"name"`
-	Domain       string         `json:"domain"`
-	Priority     string         `json:"priority"`
-	OpenPostings int            `json:"open_postings"`
-	TotalEvents  int            `json:"total_events"`
-	Timing       []TimingBucket `json:"timing"`            // last 12 months
-	ExpectedOpen string         `json:"expected_open"`     // data-derived SWE seasonality peak month, e.g. "Aug" ("" if too few samples)
-	ExpectedEst  string         `json:"expected_estimate"` // curated fallback month when data is sparse (the UI labels it "≈ est.")
+	ID           int64  `json:"id"`
+	Name         string `json:"name"`
+	Domain       string `json:"domain"`
+	Priority     string `json:"priority"`
+	ExpectedOpen string `json:"expected_open"`     // data-derived SWE seasonality peak month, e.g. "Aug" ("" if too few samples)
+	ExpectedEst  string `json:"expected_estimate"` // curated fallback month when data is sparse (the UI labels it "≈ est.")
 
 	// Posted pay of the company's most recent SWE-category internship (the card's
 	// pay figure). PayPeriod == "" means no SWE-intern pay is known yet.
@@ -216,9 +219,7 @@ var monthAbbr = []string{"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug",
 func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]CompanySummary, error) {
 	rows, err := s.Pool.Query(ctx,
 		`SELECT e.id, e.canonical_name, COALESCE(e.domain, ''), COALESCE(e.metadata->>'priority', ''),
-		        COALESCE(e.metadata->>'expected_estimate', ''),
-		        (SELECT count(*) FROM postings p WHERE p.entity_id = e.id AND p.status = 'open'),
-		        (SELECT count(*) FROM events ev WHERE ev.entity_id = e.id)
+		        COALESCE(e.metadata->>'expected_estimate', '')
 		 FROM watchlist w JOIN entities e ON e.id = w.entity_id
 		 WHERE w.user_id = $1
 		 ORDER BY e.canonical_name`, userID)
@@ -229,15 +230,12 @@ func (s *Store) WatchlistCompanies(ctx context.Context, userID int64) ([]Company
 	var out []CompanySummary
 	for rows.Next() {
 		var c CompanySummary
-		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.Priority, &c.ExpectedEst, &c.OpenPostings, &c.TotalEvents); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Domain, &c.Priority, &c.ExpectedEst); err != nil {
 			return nil, err
 		}
 		out = append(out, c)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	if err := s.attachTiming(ctx, out); err != nil {
 		return nil, err
 	}
 	if err := s.attachExpected(ctx, out); err != nil {
@@ -299,12 +297,17 @@ func (s *Store) attachExpected(ctx context.Context, companies []CompanySummary) 
 		ids[i] = companies[i].ID
 		idx[companies[i].ID] = &companies[i]
 	}
+	// ORDER BY count DESC, m ASC makes the peak-month pick deterministic: the first
+	// row per entity is the highest-count month, ties broken by earliest month — so
+	// a tie no longer flips between page loads (the loop below takes strictly-greater,
+	// so the first row wins and equal-count later months don't displace it).
 	rows, err := s.Pool.Query(ctx,
-		`SELECT e.entity_id, EXTRACT(MONTH FROM e.event_time)::int AS m, count(*)
+		`SELECT e.entity_id, EXTRACT(MONTH FROM e.event_time)::int AS m, count(*) AS c
 		 FROM events e JOIN postings p ON p.id = e.posting_id
 		 WHERE e.type = 'posting_opened' AND e.entity_id = ANY($1) AND p.is_summer
 		   AND p.category = ANY(ARRAY['Software','Software Engineering'])
-		 GROUP BY e.entity_id, m`, ids)
+		 GROUP BY e.entity_id, m
+		 ORDER BY e.entity_id, c DESC, m ASC`, ids)
 	if err != nil {
 		return err
 	}
@@ -346,43 +349,6 @@ func (s *Store) attachExpected(ctx context.Context, companies []CompanySummary) 
 	return nil
 }
 
-// attachTiming fills each company's last-12-months posting_opened histogram in
-// one grouped query (avoids an N+1 of per-company /timing calls).
-func (s *Store) attachTiming(ctx context.Context, companies []CompanySummary) error {
-	if len(companies) == 0 {
-		return nil
-	}
-	ids := make([]int64, len(companies))
-	idx := make(map[int64]*CompanySummary, len(companies))
-	for i := range companies {
-		ids[i] = companies[i].ID
-		idx[companies[i].ID] = &companies[i]
-	}
-	rows, err := s.Pool.Query(ctx,
-		`SELECT entity_id, to_char(event_time, 'YYYY-MM') AS month, count(*)
-		 FROM events
-		 WHERE type = 'posting_opened'
-		   AND event_time >= date_trunc('month', now()) - interval '11 months'
-		   AND entity_id = ANY($1)
-		 GROUP BY entity_id, month
-		 ORDER BY entity_id, month`, ids)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var entityID int64
-		var b TimingBucket
-		if err := rows.Scan(&entityID, &b.Month, &b.Count); err != nil {
-			return err
-		}
-		if c := idx[entityID]; c != nil {
-			c.Timing = append(c.Timing, b)
-		}
-	}
-	return rows.Err()
-}
-
 type TimelineEvent struct {
 	Type      string          `json:"type"`
 	EventTime time.Time       `json:"event_time"`
@@ -406,11 +372,6 @@ func (s *Store) CompanyTimeline(ctx context.Context, entityID int64, limit int) 
 		out = append(out, e)
 	}
 	return out, rows.Err()
-}
-
-type TimingBucket struct {
-	Month string `json:"month"`
-	Count int    `json:"count"`
 }
 
 type SeasonBucket struct {
@@ -445,56 +406,3 @@ func (s *Store) CompanySeasonality(ctx context.Context, entityID int64, categori
 	return out, rows.Err()
 }
 
-// CompanyTiming returns the monthly posting-open histogram — the flagship
-// "when do they historically open apps" feature.
-func (s *Store) CompanyTiming(ctx context.Context, entityID int64) ([]TimingBucket, error) {
-	rows, err := s.Pool.Query(ctx,
-		`SELECT to_char(event_time, 'YYYY-MM') AS month, count(*)
-		 FROM events WHERE entity_id = $1 AND type = 'posting_opened'
-		 GROUP BY month ORDER BY month`, entityID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []TimingBucket
-	for rows.Next() {
-		var t TimingBucket
-		if err := rows.Scan(&t.Month, &t.Count); err != nil {
-			return nil, err
-		}
-		out = append(out, t)
-	}
-	return out, rows.Err()
-}
-
-type OpenPosting struct {
-	ID        int64     `json:"id"`
-	Company   string    `json:"company"`
-	Title     string    `json:"title"`
-	URL       string    `json:"url"`
-	Locations []string  `json:"locations"`
-	FirstSeen time.Time `json:"first_seen"`
-}
-
-func (s *Store) OpenPostings(ctx context.Context, userID int64, limit int) ([]OpenPosting, error) {
-	rows, err := s.Pool.Query(ctx,
-		`SELECT p.id, e.canonical_name, p.title, COALESCE(p.url, ''), p.locations, p.first_seen
-		 FROM postings p
-		 JOIN entities e ON e.id = p.entity_id
-		 JOIN watchlist w ON w.entity_id = p.entity_id AND w.user_id = $1
-		 WHERE p.status = 'open'
-		 ORDER BY p.first_seen DESC LIMIT $2`, userID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []OpenPosting
-	for rows.Next() {
-		var p OpenPosting
-		if err := rows.Scan(&p.ID, &p.Company, &p.Title, &p.URL, &p.Locations, &p.FirstSeen); err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
-}

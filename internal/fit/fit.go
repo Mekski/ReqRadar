@@ -34,9 +34,10 @@ func (s *Service) Score(ctx context.Context, resumeText, jdText string, postingI
 	if resumeText == "" || jdText == "" {
 		return nil, false, fmt.Errorf("resume and job description are both required")
 	}
-	// Fold the prompt version into the JD hash so a prompt/rubric change invalidates
-	// stale cached scores instead of serving the old grade.
-	jdHash, resumeHash := hash(promptVersion+"\x00"+jdText), hash(resumeText)
+	// Fold the prompt version AND the model id into the JD hash so a prompt/rubric
+	// change OR a model switch (e.g. flash->pro) invalidates stale cached scores
+	// instead of serving a grade the current model+prompt never produced.
+	jdHash, resumeHash := hash(promptVersion+"\x00"+s.llm.Model()+"\x00"+jdText), hash(resumeText)
 
 	if cached, ok, err := s.store.GetFitScore(ctx, jdHash, resumeHash); err != nil {
 		return nil, false, err

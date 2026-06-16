@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/Mekski/reqradar/internal/bus"
@@ -24,9 +23,6 @@ type Processor struct {
 	resolver    *Resolver
 	normalizers map[string]Normalizer
 	sourceIDs   map[string]int64
-
-	mu       sync.Mutex
-	recorded map[string]bool // raw company text -> resolution decision already logged
 }
 
 // New loads the resolver tables and source ids from the DB and wires the
@@ -51,7 +47,6 @@ func New(ctx context.Context, st *store.Store, b *bus.Bus, log *slog.Logger) (*P
 		resolver:    NewResolver(aliases, domains),
 		normalizers: map[string]Normalizer{"simplify-listings": normalizeSimplify, "greenhouse": normalizeGreenhouse, "ashby": normalizeAshby},
 		sourceIDs:   sourceIDs,
-		recorded:    map[string]bool{},
 	}, nil
 }
 
@@ -161,7 +156,11 @@ func (p *Processor) persist(ctx context.Context, raw signal.RawSignal, sourceID,
 		if err := p.store.InsertPostingVersion(ctx, tx, id, raw.ContentHash, string(raw.Payload), parsed, raw.ObservedAt); err != nil {
 			return err
 		}
-		if err := p.store.UpdatePosting(ctx, tx, id, post.Title, post.URL, post.Locations, raw.ObservedAt); err != nil {
+		if err := p.store.UpdatePosting(ctx, tx, id, store.PostingUpdate{
+			Title: post.Title, URL: post.URL, Locations: post.Locations, LastSeen: raw.ObservedAt,
+			PayMin: payMin, PayMax: payMax, PayPeriod: post.PayPeriod, PayCurrency: post.PayCurrency,
+			JDText: post.JDText,
+		}); err != nil {
 			return err
 		}
 		emit, err = p.makeEvent(ctx, tx, entityID, "jd_changed", raw, &id, post)
@@ -264,21 +263,14 @@ func (p *Processor) RelayOutbox(ctx context.Context, limit int) (int, error) {
 	return n, nil
 }
 
-// recordDecision records the resolution decision for a raw company string. The
-// in-process p.recorded set is only a hot-path optimization — it skips a redundant
-// DB write for strings already handled this run (the feed re-emits everything each
-// poll). The real, cross-restart guarantee of one decision per string is the
-// unique index on resolution_decisions.raw_text (RecordResolution does ON CONFLICT
-// DO NOTHING), so a restart no longer re-appends rows for the whole feed.
+// recordDecision records the resolution decision for a raw company string.
+// RecordResolution is idempotent — a unique index on resolution_decisions.raw_text
+// with ON CONFLICT DO NOTHING guarantees one decision per string — so we just write
+// every time and let Postgres dedupe. (An earlier in-memory "already recorded" set
+// avoided the redundant upsert, but it grew unbounded for the life of this always-on
+// process, one entry per distinct firehose company string; the idempotent write is
+// cheap at this volume and leak-free.)
 func (p *Processor) recordDecision(ctx context.Context, company string, entityID int64, method string, resolved bool) {
-	p.mu.Lock()
-	if p.recorded[company] {
-		p.mu.Unlock()
-		return
-	}
-	p.recorded[company] = true
-	p.mu.Unlock()
-
 	var eid *int64
 	conf := 0.0
 	if resolved {
