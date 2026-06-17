@@ -84,7 +84,8 @@ git pull && docker compose -f deploy/docker-compose.prod.yml up -d --build
 docker compose -f deploy/docker-compose.prod.yml logs -f processor
 docker compose -f deploy/docker-compose.prod.yml ps
 
-# backfill 3-yr history for newly-added companies (heavy, manual; needs GITHUB_TOKEN in .env):
+# backfill 3-yr history for newly-added companies (~33s; needs GITHUB_TOKEN in .env).
+# Normally you'd just click "rebuild history" on the dashboard; this is the CLI form:
 docker compose -f deploy/docker-compose.prod.yml run --rm collector /app backfill
 ```
 
@@ -93,6 +94,7 @@ docker compose -f deploy/docker-compose.prod.yml run --rm collector /app backfil
 - **Automated 24/7:** polling, processing, Telegram alerts, on-add LLM enrichment
   (expected-open + ATS discovery), and self-restart on crash/reboot.
 - **Manual / one-time:** VM setup + `.env`, the one-time `firehose-prime`, adding
-  companies (your watchlist), and `backfill` (historical timing — can be scheduled later).
+  companies (your watchlist), and `backfill` (historical timing — a **one-click
+  "rebuild history" button** on the dashboard, ~33s; the CLI form above also works).
 - **Coming next (CI/CD):** `git push` → GitHub Actions builds images → pushes to GHCR →
   SSH-deploys to this VM → smoke test, so updates ship automatically.

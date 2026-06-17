@@ -132,6 +132,8 @@ Integration tests need a throwaway Postgres + NATS: `make test-integration` (see
 
 ## Status
 
-End-to-end and verified on a live stack, CI green: the collector → NATS → processor → Postgres pipeline; three collectors (SimplifyJobs + git-history backfill, Greenhouse, Ashby); ~3 years of backfilled timing and "expected open" seasonality across 30 companies; posted-pay extraction; watchlist + firehose Telegram alerts; both LLM features; and the Next.js dashboard. **Remaining:** a free always-on deployment so alerts run 24/7, an HN sentiment source, and a calendar view.
+End-to-end and verified on a live stack, CI green: the collector → NATS → processor → Postgres pipeline; three collectors (SimplifyJobs + git-history backfill, Greenhouse, Ashby); ~3 years of backfilled timing and "expected open" seasonality across 30+ companies; posted-pay extraction; watchlist + firehose Telegram alerts; the Next.js dashboard; and the LLM features (résumé↔JD fit, grounded company sentiment + "ways in", and grounded auto-discovery that fills a newly-added company's expected-open month and ATS board on its own). A one-click **"rebuild history"** button replays the backfill on demand (~33s).
+
+**Deployment:** the artifacts are built — a multi-stage `Dockerfile`, a production [`deploy/docker-compose.prod.yml`](deploy/docker-compose.prod.yml) (Postgres + NATS with persistent volumes, one-shot migrate/seed, `restart: unless-stopped`, API bound to localhost — the dashboard is reached over an SSH tunnel, not published), and an [Oracle Always-Free deploy guide](deploy/README.md). **Remaining:** stand it up on the VM + a CI/CD deploy step; plus an HN sentiment source and a calendar view.
 
 > Single-user project (built for my own Summer-2027 internship search). The schema leaves the multi-user seam but there are no signup/auth flows by design.
