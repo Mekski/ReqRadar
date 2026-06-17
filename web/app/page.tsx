@@ -1,6 +1,7 @@
 import { getCompanies, type Company } from "@/lib/api";
 import { CompanyCard } from "@/app/components/CompanyCard";
 import { AddCompanyForm } from "@/app/components/AddCompanyForm";
+import { RebuildHistoryButton } from "@/app/components/RebuildHistoryButton";
 import { ApiDown } from "@/app/components/ui";
 
 const TIER_ORDER = ["S", "A", "B", "C"];
@@ -33,7 +34,10 @@ export default async function Home() {
           <h1 className="font-mono text-xl font-bold tracking-tight text-ink">watchlist</h1>
           <p className="mt-1 font-mono text-xs text-dim">{companies.length} companies tracked</p>
         </div>
-        <AddCompanyForm />
+        <div className="flex flex-wrap items-center gap-2">
+          <RebuildHistoryButton />
+          <AddCompanyForm />
+        </div>
       </div>
 
       {tiers.map((t) => {

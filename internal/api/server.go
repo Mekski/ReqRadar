@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/Mekski/reqradar/internal/ats"
+	"github.com/Mekski/reqradar/internal/backfill"
 	"github.com/Mekski/reqradar/internal/expected"
 	"github.com/Mekski/reqradar/internal/fit"
 	"github.com/Mekski/reqradar/internal/sentiment"
@@ -51,6 +52,7 @@ type Server struct {
 	sentiment *sentiment.Service
 	expected  *expected.Service
 	ats       *ats.Service
+	backfill  *backfill.Runner
 }
 
 // ServerConfig carries the cross-cutting HTTP concerns (auth + CORS) so they
@@ -60,8 +62,8 @@ type ServerConfig struct {
 	CORSOrigin string // Access-Control-Allow-Origin; "*" for local dev
 }
 
-func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service, sentSvc *sentiment.Service, expSvc *expected.Service, atsSvc *ats.Service, cfg ServerConfig) http.Handler {
-	s := &Server{store: st, log: log, userID: userID, fit: fitSvc, sentiment: sentSvc, expected: expSvc, ats: atsSvc}
+func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Service, sentSvc *sentiment.Service, expSvc *expected.Service, atsSvc *ats.Service, bfRunner *backfill.Runner, cfg ServerConfig) http.Handler {
+	s := &Server{store: st, log: log, userID: userID, fit: fitSvc, sentiment: sentSvc, expected: expSvc, ats: atsSvc, backfill: bfRunner}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
@@ -83,6 +85,9 @@ func NewServer(st *store.Store, log *slog.Logger, userID int64, fitSvc *fit.Serv
 	// Sentiment (grounded LLM): the stored report + on-demand (re)generation.
 	mux.HandleFunc("GET /api/companies/{id}/sentiment", s.getSentiment)
 	mux.HandleFunc("POST /api/companies/{id}/sentiment", s.generateSentiment)
+	// Backfill: on-demand "rebuild history" trigger + status (the dashboard button).
+	mux.HandleFunc("POST /api/backfill", s.runBackfill)
+	mux.HandleFunc("GET /api/backfill/status", s.backfillStatus)
 	return cors(cfg.CORSOrigin, requireToken(cfg.APIToken, mux))
 }
 

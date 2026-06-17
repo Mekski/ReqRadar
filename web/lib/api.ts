@@ -155,3 +155,19 @@ export async function updateTier(id: number, priority: string): Promise<void> {
   });
   if (!res.ok) throw new Error(`update tier → ${res.status}`);
 }
+
+// ---- Backfill (rebuild history) ----
+
+export type BackfillStatus = {
+  running: boolean;
+  last_run_at: string | null;
+  last_error?: string;
+  emitted: number; // postings replayed on the last completed run
+};
+
+export async function runBackfill(): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/backfill`, { method: "POST" });
+  if (!res.ok) throw new Error((await res.text()) || `backfill → ${res.status}`);
+}
+
+export const getBackfillStatus = () => get<BackfillStatus>("/api/backfill/status");
