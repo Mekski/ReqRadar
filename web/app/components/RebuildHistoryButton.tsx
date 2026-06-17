@@ -65,7 +65,7 @@ export function RebuildHistoryButton() {
 
   const running = status?.running ?? false;
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-col items-end gap-1">
       <button
         onClick={onClick}
         disabled={running}

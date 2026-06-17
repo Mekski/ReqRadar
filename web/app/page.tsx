@@ -29,14 +29,14 @@ export default async function Home() {
   let idx = 0;
   return (
     <div className="space-y-10">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-mono text-xl font-bold tracking-tight text-ink">watchlist</h1>
           <p className="mt-1 font-mono text-xs text-dim">{companies.length} companies tracked</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <RebuildHistoryButton />
+        <div className="flex flex-col items-end gap-2">
           <AddCompanyForm />
+          <RebuildHistoryButton />
         </div>
       </div>
 
