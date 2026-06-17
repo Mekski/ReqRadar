@@ -16,6 +16,7 @@ import (
 
 	"github.com/Mekski/reqradar/internal/config"
 	"github.com/Mekski/reqradar/internal/store"
+	"github.com/Mekski/reqradar/seed"
 )
 
 type seedFile struct {
@@ -46,18 +47,20 @@ type source struct {
 }
 
 func main() {
-	path := "seed/watchlist.yaml"
+	// Default to the embedded watchlist (self-contained binary, works in a container
+	// with no source checkout). An explicit path arg overrides it for local edits.
+	raw := seed.Watchlist
+	src := "embedded watchlist.yaml"
 	if len(os.Args) > 1 {
-		path = os.Args[1]
-	}
-
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		log.Fatalf("read %s: %v", path, err)
+		src = os.Args[1]
+		var err error
+		if raw, err = os.ReadFile(src); err != nil {
+			log.Fatalf("read %s: %v", src, err)
+		}
 	}
 	var sf seedFile
 	if err := yaml.Unmarshal(raw, &sf); err != nil {
-		log.Fatalf("parse %s: %v", path, err)
+		log.Fatalf("parse %s: %v", src, err)
 	}
 
 	chatID := os.Getenv("TELEGRAM_CHAT_ID")

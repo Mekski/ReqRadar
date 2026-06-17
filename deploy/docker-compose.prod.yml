@@ -1,0 +1,110 @@
+# Production stack: the always-on pipeline on a single VM (e.g. Oracle Cloud Always
+# Free). Brings up Postgres + NATS, runs migrate→seed once, then the three long-
+# running services with restart policies so a crash or VM reboot self-heals.
+#
+#   cp .env.example .env   # fill in TELEGRAM_*, GEMINI_API_KEY, etc.
+#   docker compose -f deploy/docker-compose.prod.yml up -d --build
+#
+# The API binds to 127.0.0.1 only — it is NOT exposed to the internet. Reach the
+# dashboard over an SSH tunnel: ssh -L 8080:localhost:8080 <vm>. See deploy/README.md.
+name: reqradar
+
+x-app: &app
+  build:
+    context: ..
+    dockerfile: Dockerfile
+  env_file: [../.env]
+  # Point the services at the compose-network hostnames. Set explicitly so a stray
+  # localhost DSN in .env (from local dev) can't override and break in-container.
+  environment:
+    REQRADAR_POSTGRES_DSN: postgres://reqradar:reqradar@postgres:5432/reqradar?sslmode=disable
+    REQRADAR_NATS_URL: nats://nats:4222
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: reqradar
+      POSTGRES_PASSWORD: reqradar
+      POSTGRES_DB: reqradar
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reqradar"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  nats:
+    image: nats:2-alpine
+    # File-backed JetStream (-sd /data) on a volume — so a restart does NOT wipe the
+    # streams/consumers (the volume-less-dev-nats gotcha that loses state).
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes: ["natsdata:/data"]
+    restart: unless-stopped
+
+  # One-shot: apply migrations, then exit. App services wait for it to succeed.
+  migrate:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args: {SERVICE: migrate}
+    command: ["up"]
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  # One-shot: load the watchlist (embedded). Idempotent + non-destructive (metadata
+  # merge), so it's safe to run on every boot. Needs TELEGRAM_CHAT_ID from .env.
+  seed:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args: {SERVICE: seed}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+    restart: "no"
+
+  collector:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args: {SERVICE: collector}
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats: {condition: service_started}
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  processor:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args: {SERVICE: processor}
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats: {condition: service_started}
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: Dockerfile
+      args: {SERVICE: api}
+    # Localhost-only: not internet-facing. Tunnel in for the dashboard.
+    ports: ["127.0.0.1:8080:8080"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      nats: {condition: service_started}
+      migrate: {condition: service_completed_successfully}
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  natsdata:

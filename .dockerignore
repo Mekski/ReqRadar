@@ -1,0 +1,10 @@
+# Keep the build context small + secrets out of images.
+.git
+.env
+web/node_modules
+web/.next
+docs
+*.md
+deploy/prometheus.yml
+**/*_test.go
+.claude
