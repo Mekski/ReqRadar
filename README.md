@@ -17,7 +17,7 @@
 
 ---
 
-Job boards tell you what's open. ReqRadar tells you **when each of your target companies historically opens its summer SWE-intern applications — and pings your phone the moment a new role drops.** You bookmark ~30 companies into tiers; it mines live and 3-year-historical posting signals, resolves them to your watchlist, learns each company's seasonal opening window, and fires **sub-minute Telegram alerts** on every new role.
+Job boards tell you what's open. ReqRadar tells you **when each of your target companies historically opens its summer SWE-intern applications — and pings your phone the moment a new role drops.** You bookmark as many target companies as you want into tiers; it mines live and 3-year-historical posting signals, resolves them to your watchlist, learns each company's seasonal opening window, and fires **sub-minute Telegram alerts** on every new role.
 
 It's deliberately built as an **event-driven, multi-service system** — the distributed-systems, real-time-data, API-design, and CI/CD work that internship JDs actually ask for, not five cron scripts. Every component is meant to survive the interview question *"why not something simpler?"* — the simpler alternatives (Kafka, a second datastore, a monolith) were each evaluated and deliberately rejected at this scale.
 
@@ -27,7 +27,7 @@ It's deliberately built as an **event-driven, multi-service system** — the dis
 
 ### Tiered watchlist + "expected to open"
 
-Bookmark companies into **S / A / B / C** tiers and re-rank them inline. For each, ReqRadar aggregates historical `posting_opened` events by month-of-year to surface an **expected-open month** and a season chart — answering the question that actually drives intern recruiting timing. Data-derived where there's enough history; a researched, cited estimate (`≈ est.`) or honest `rolling` otherwise.
+Bookmark any number of companies into **S / A / B / C** tiers and re-rank them inline. For each, ReqRadar aggregates historical `posting_opened` events by month-of-year to surface an **expected-open month** and a season chart — answering the question that actually drives intern recruiting timing. Data-derived where there's enough history; a researched, cited estimate (`≈ est.`) or honest `rolling` otherwise. **Adding a company auto-enriches it:** a grounded web search fills its expected-open month, and another detects which ATS it uses (Greenhouse/Ashby) — verifying the board against the live API before trusting it — so its postings get the full pipeline with no manual setup.
 
 <div align="center"><img src="docs/assets/company-detail.png" alt="Company detail — expected-open seasonality + community sentiment" width="820"></div>
 
@@ -45,7 +45,7 @@ Upload your résumé (PDF) and score it against any watchlist role's real job de
 
 ### Grounded company sentiment *(LLM)*
 
-A one-click report per company synthesizing what engineers actually say — prestige, culture (liked vs disliked), interview process and OA difficulty, intern pay + housing stipend, return-offer rates, and watch-outs. Built on **Gemini's grounded Google Search** (real citations, nothing scraped), with a prompt that's required to say *"not enough public information found"* rather than invent specifics.
+A one-click report per company synthesizing what engineers actually say — prestige, culture (liked vs disliked), interview process and OA difficulty, intern pay + housing stipend, return-offer rates, watch-outs, and **"ways in" beyond just applying** (referrals, hackathons, ambassador programs, recruiting events). Built on **Gemini's grounded Google Search** (real citations, nothing scraped), with a prompt that's required to say *"not enough public information found"* rather than invent specifics.
 
 <div align="center"><img src="docs/assets/sentiment-card.png" alt="Grounded company sentiment report" width="820"></div>
 
@@ -78,7 +78,7 @@ flowchart LR
     PG --> API
     API --> WEB[Next.js dashboard]
     API --> TG[Telegram]
-    API -.->|fit / sentiment · on-demand| GEM[Gemini free-tier]
+    API -.->|LLM features · on-demand| GEM[Gemini free-tier]
 ```
 
 - **collector** — a plugin framework: each source only fetches, stamps, and content-hashes (canonicalizing volatile fields so unchanged re-posts don't re-alert). Adding a source is one file + one registration line.
@@ -96,15 +96,15 @@ flowchart LR
 - **Real CI** (GitHub Actions): `lint` (golangci-lint), `unit`, `frontend` (`next build`), and an `integration` job that spins **real Postgres + NATS** to exercise the dedupe state machine and the outbox.
 - **Golden-file collector tests** from captured payloads — source-format drift fails CI instead of silently dropping data.
 - **`event_time` vs `observed_at`** kept distinct throughout, so 3-year backfill and sub-minute latency coexist without conflating "when it happened" with "when we saw it."
-- **Every heavy choice is deliberate** — NATS over a Postgres queue, a transactional outbox over fire-and-forget, partitioning weighed against a plain table — each defensible on its own terms, not cargo-culted.
+- **Every heavy choice is deliberate, and the trade-offs are written down** — NATS over a Postgres queue (with the honest "what I'd cut first" noted), a transactional outbox over fire-and-forget, and a backfill *measured* (~33s) before deciding **not** to add a cache. Judgment over cargo-culting; rejected alternatives documented.
 
 ---
 
 ## Tech stack
 
-**Backend** — Go 1.26 · NATS JetStream · PostgreSQL 17 (time-partitioned, `golang-migrate`) · `log/slog`
+**Backend** — Go 1.26 · NATS JetStream · PostgreSQL 17 (`golang-migrate`) · `log/slog`
 **Frontend** — Next.js 16 · React 19 · TypeScript · Tailwind 4 · react-markdown
-**AI** — Gemini (free-tier): fit scoring + grounded-search sentiment
+**AI** — Gemini (free-tier): fit scoring, grounded sentiment, and grounded auto-discovery (expected-open + ATS board)
 **Infra** — Docker Compose · GitHub Actions · Telegram Bot API
 
 ---
